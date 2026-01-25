@@ -1,0 +1,25 @@
+# --- Python Internals ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Virtual Environments ---
+# These names are standard, keep them all just in case
+venv/
+.venv/
+env/
+
+# --- Environment Variables (CRITICAL) ---
+# Never push your database passwords to GitHub!
+.env
+
+# --- IDE Settings (Optional but recommended) ---
+.vscode/
+.idea/
+
+# --- Operating System Files ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
