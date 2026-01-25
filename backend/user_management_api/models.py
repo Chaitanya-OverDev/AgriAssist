@@ -14,8 +14,12 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     phone_number = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, default="GuestUser")
-    profile_photo = Column(String, default="default_avatar.png")
+    
+    # --- Renamed & New Columns ---
+    profil_pic_url = Column(String, default="default_avatar.png") # Renamed
+    is_verified = Column(Boolean, default=False)                  # New
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now()) # New (updates automatically)
 
 class OTP(Base):
     __tablename__ = "otp_codes"
