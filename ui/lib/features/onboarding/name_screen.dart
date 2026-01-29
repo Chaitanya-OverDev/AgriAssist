@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/custom_text_field.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../routes/app_routes.dart'; // Ensure this path points to your app_routes.dart
 
 class NameScreen extends StatelessWidget {
   const NameScreen({super.key});
@@ -73,11 +74,11 @@ class NameScreen extends StatelessWidget {
             PrimaryButton(
               text: "Submit",
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Registration Completed!")),
-                );
+                // Navigate to the main voice chat feature after onboarding
+                Navigator.pushNamedAndRemoveUntil(context, AppRoutes.voiceChat, (route) => false);
               },
             ),
+
             const SizedBox(height: 15),
             const Center(
               child: Text(
