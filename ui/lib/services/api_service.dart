@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 class ApiService {
   // Use 10.0.2.2 for Android Emulator, 'localhost' for iOS Simulator
   // If using a physical device, use your PC's IP address (e.g., http://192.168.1.5:8000)
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl = 'https://agriassist-cxng.onrender.com';
 
   // Store data temporarily for the session
   static String? currentPhoneNumber;
