@@ -1,20 +1,20 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
 from datetime import timedelta
 import random
 
-# --- Corrected Imports ---
-# We use absolute imports assuming you run from the 'root' folder
+# Corrected Imports
 from db import models
 from db.database import engine, get_db
 from db.models import User, OTP, get_ist_time
 from api import schemas 
 
+# Create DB Tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="User Management API")
+app = FastAPI(title="Farmer Chatbot API")
 
-# --- 1. Send OTP Endpoint ---
+# --- 1. Send OTP Endpoint (No Code in Response) ---
 @app.post("/auth/send-otp")
 def send_otp(request: schemas.PhoneSchema, db: Session = Depends(get_db)):
     phone = request.phone_number
@@ -23,7 +23,7 @@ def send_otp(request: schemas.PhoneSchema, db: Session = Depends(get_db)):
     db.query(OTP).filter(OTP.phone_number == phone).delete()
     db.commit()
     
-    # Generate OTP
+    # Generate OTP (Stored in DB but NOT returned in response)
     otp_code = f"{random.randint(100000, 999999)}"
     expiration_time = get_ist_time() + timedelta(minutes=5)
     
@@ -36,25 +36,28 @@ def send_otp(request: schemas.PhoneSchema, db: Session = Depends(get_db)):
     db.add(new_otp)
     db.commit()
     
-    return {"message": "OTP sent successfully", "otp": otp_code}
+    return {"message": "OTP sent successfully"}
 
-# --- 2. Verify OTP Endpoint ---
+
+# --- 2. Verify OTP Endpoint (BYPASS MODE) ---
 @app.post("/auth/verify-otp")
 def verify_otp(request: schemas.VerifyOTPSchema, db: Session = Depends(get_db)):
-    otp_record = db.query(OTP).filter(
-        OTP.phone_number == request.phone_number,
-        OTP.otp_code == request.otp,
-        OTP.is_used == False
-    ).first()
+    otp = request.otp.strip()
     
-    if not otp_record:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+    # --- VALIDATION RULES ---
+    if not otp:
+        raise HTTPException(status_code=400, detail="OTP cannot be blank")
     
-    if otp_record.expires_at < get_ist_time():
-        raise HTTPException(status_code=400, detail="OTP has expired")
+    if not otp.isdigit():
+        raise HTTPException(status_code=400, detail="OTP must contain only numbers")
         
-    otp_record.is_used = True
-    db.commit()
+    if len(otp) != 6:
+        raise HTTPException(status_code=400, detail="OTP must be 6 digits")
+        
+    if otp == "000000":
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    # bypass below
     
     # Check if user exists
     user = db.query(User).filter(User.phone_number == request.phone_number).first()
@@ -72,30 +75,54 @@ def verify_otp(request: schemas.VerifyOTPSchema, db: Session = Depends(get_db)):
     
     return {"message": "Login successful", "user_id": user.id, "status": "Existing User"}
 
-# --- 3. Read All Users ---
-@app.get("/users", response_model=list[schemas.UserResponse])
-def read_all_users(db: Session = Depends(get_db)):
-    users = db.query(User).all()
-    return users
 
-# --- 4. Update User ---
+# --- 3. Update User Profile (Form Data - No Image) ---
 @app.put("/users/update/{user_id}")
-def update_user(user_id: int, request: schemas.UpdateProfileSchema, db: Session = Depends(get_db)):
+def update_user(
+    user_id: int,
+    full_name: str = Form(None),
+    has_farm: str = Form(None),      # yes/no
+    water_supply: str = Form(None),  # rain, well, river, channel
+    farm_type: str = Form(None),     # Koradvahu, bagayati
+    db: Session = Depends(get_db)
+):
     user = db.query(User).filter(User.id == user_id).first()
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    if request.full_name:
-        user.full_name = request.full_name
-    
-    if request.profil_pic_url:
-        user.profil_pic_url = request.profil_pic_url
+    # Update Info
+    if full_name:
+        user.full_name = full_name
         
+    if has_farm:
+        user.has_farm = has_farm
+        
+    if water_supply:
+        user.water_supply = water_supply
+        
+    if farm_type:
+        user.farm_type = farm_type
+
     db.commit()
     return {"message": "Profile updated successfully"}
 
-# --- 5. Delete User ---
+
+# --- 4. Read Single User ---
+@app.get("/users/{user_id}", response_model=schemas.UserResponse)
+def read_single_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+# --- 5. Read All Users ---
+@app.get("/users", response_model=list[schemas.UserResponse])
+def read_all_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return users
+
+# --- 6. Delete User ---
 @app.delete("/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
@@ -105,11 +132,3 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "User deleted successfully"}
-
-# --- Read Single User ---
-@app.get("/users/{user_id}", response_model=schemas.UserResponse)
-def read_single_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
