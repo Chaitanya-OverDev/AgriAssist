@@ -45,7 +45,7 @@ class _OtpScreenState extends State<OtpScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 80),
-            const Text("Enter the OTP", style: AppTextStyles.heading),
+            const Text("Enter the OTP sent to\nyour number", style: AppTextStyles.heading),
             const SizedBox(height: 40),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
