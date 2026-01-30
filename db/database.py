@@ -1,30 +1,31 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 import os
-from dotenv import load_dotenv
-from urllib.parse import quote_plus
-from pathlib import Path
 
-# --- Construct path to .env file in the root directory ---
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+# 1. Get the full database URL from Render's environment variable
+#    If not found (local testing), fall back to a local SQLite file
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sql_app.db")
 
-# 1. Get raw values
-db_user = os.getenv("DB_USER")
-db_password = os.getenv("DB_PASSWORD")
-db_host = os.getenv("DB_HOST")
-db_name = os.getenv("DB_NAME")
+# 2. Fix the Protocol for SQLAlchemy
+#    Render uses "postgres://", but SQLAlchemy requires "postgresql://"
+if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# 2. URL Encode the password
-encoded_password = quote_plus(db_password)
+# 3. Create the Engine
+#    (We remove the manual quote_plus/password logic because it's already in the URL)
+if "sqlite" in SQLALCHEMY_DATABASE_URL:
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
-# 3. Construct connection string
-SQLALCHEMY_DATABASE_URL = f"postgresql://{db_user}:{encoded_password}@{db_host}/{db_name}"
-
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# 4. Create Session & Base
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# 5. Dependency
 def get_db():
     db = SessionLocal()
     try:
