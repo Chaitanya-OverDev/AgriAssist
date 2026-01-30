@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class OtpBox extends StatelessWidget {
-  const OtpBox({super.key});
+  final TextEditingController controller; // Pass controller to track individual digits
+
+  const OtpBox({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -14,16 +16,20 @@ class OtpBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.borderDefault),
       ),
-      child: const Center(
+      child: Center(
         child: TextField(
+          controller: controller,
           textAlign: TextAlign.center,
           keyboardType: TextInputType.number,
           maxLength: 1,
-          decoration: InputDecoration(
+          onChanged: (value) {
+            if (value.length == 1) FocusScope.of(context).nextFocus();
+          },
+          decoration: const InputDecoration(
             border: InputBorder.none,
-            counterText: "", // Hides the character counter
+            counterText: "",
           ),
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ),
     );
