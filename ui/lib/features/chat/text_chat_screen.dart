@@ -1,10 +1,8 @@
-import 'dart:convert';
-import 'dart:io'; // Import Platform
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../../routes/app_routes.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import '../../routes/app_routes.dart';
 import 'settings_screen.dart';
+import '../../services/api_service.dart';
 
 class TextChatScreen extends StatefulWidget {
   const TextChatScreen({super.key});
@@ -15,74 +13,79 @@ class TextChatScreen extends StatefulWidget {
 
 class _TextChatScreenState extends State<TextChatScreen> {
   final TextEditingController controller = TextEditingController();
-  final ScrollController _scrollController = ScrollController(); // Added for auto-scroll
+  final ScrollController _scrollController = ScrollController();
+
   List<Map<String, String>> messages = [];
-  bool isLoading = false; // To show a loading indicator if needed
+  bool isLoading = false;
 
-  String getBaseUrl() {
-
-    //If using real device then comment this code
-    // if (Platform.isAndroid) {
-    //   return "http://10.0.2.2:8000";
-    // } else {
-    //   return "http://127.0.0.1:8000";
-    // }
-     return "http://10.108.2.174:8000"; // Uncomment and set this for real devices
-  }
+  // Track the current session ID.
+  // If null, we create a new session on the first message.
+  int? activeSessionId;
 
   // ⭐ SEND MESSAGE FUNCTION
   Future<void> sendMessage() async {
     String text = controller.text.trim();
     if (text.isEmpty) return;
 
-    // 1. Add User Message immediately
+    // 1. Add User Message to UI immediately
     setState(() {
       messages.add({"role": "user", "text": text});
       isLoading = true;
     });
 
     controller.clear();
-    _scrollToBottom(); // Auto scroll down
+    _scrollToBottom();
 
     try {
-      final String baseUrl = getBaseUrl();
+      // 2. Check Login Status
+      if (ApiService.currentUserId == null) {
+        throw Exception("User not logged in. Please restart app and login.");
+      }
 
-      // 2. Send request to Backend
-      final response = await http.post(
-        Uri.parse("$baseUrl/chat/send"), // 👈 MATCHED TO BACKEND ENDPOINT
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"message": text}),
-      );
+      // 3. Create Session if it doesn't exist
+      if (activeSessionId == null) {
+        // We give a temp title, the AI will auto-rename it later on the backend
+        int? newSessionId = await ApiService.createSession("New Consultation");
 
-      if (!mounted) return; // Prevent setState if screen is closed
+        if (newSessionId != null) {
+          activeSessionId = newSessionId;
+          print("✅ Session Created: $activeSessionId");
+        } else {
+          throw Exception("Failed to create chat session.");
+        }
+      }
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      // 4. Send Message to AI
+      String? aiResponseText = await ApiService.sendChatMessage(activeSessionId!, text);
 
-        // 3. Add Bot Response
+      if (!mounted) return;
+
+      // 5. Update UI with AI Response
+      if (aiResponseText != null) {
         setState(() {
           messages.add({
             "role": "bot",
-            "text": data["response"] ?? "No reply received."
+            "text": aiResponseText
           });
         });
       } else {
         setState(() {
           messages.add({
             "role": "bot",
-            "text": "Server Error: ${response.statusCode}"
+            "text": "⚠️ Server Error: Could not get a response."
           });
         });
       }
+
     } catch (e) {
       if (!mounted) return;
       setState(() {
         messages.add({
           "role": "bot",
-          "text": "Connection failed. Make sure the server is running."
+          "text": "❌ Error: $e"
         });
       });
-      print("Error: $e");
+      print("Chat Error: $e");
     } finally {
       if (mounted) {
         setState(() {
@@ -152,7 +155,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
               /// CHAT MESSAGES
               Expanded(
                 child: ListView.builder(
-                  controller: _scrollController, // Attach controller
+                  controller: _scrollController,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
@@ -160,7 +163,6 @@ class _TextChatScreenState extends State<TextChatScreen> {
                   itemCount: messages.length + (isLoading ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == messages.length) {
-                      // Show loading indicator bubble
                       return _botBubble("Typing...");
                     }
 
@@ -187,7 +189,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 280), // Slightly wider for better formatting
+        constraints: const BoxConstraints(maxWidth: 280),
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.all(14),
         decoration: const BoxDecoration(
@@ -202,7 +204,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
           data: text,
           styleSheet: MarkdownStyleSheet(
             p: const TextStyle(fontSize: 14, color: Colors.black),
-            strong: const TextStyle(fontWeight: FontWeight.bold), // Handles **bold**
+            strong: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -266,7 +268,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
                 hintText: "Type message here",
                 border: InputBorder.none,
               ),
-              onSubmitted: (_) => sendMessage(), // Allow Enter key to send
+              onSubmitted: (_) => sendMessage(),
             ),
           ),
 

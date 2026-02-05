@@ -3,8 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-# 1. Get the full database URL from Render's environment variable
-#    If not found (local testing), fall back to a local SQLite file
+
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sql_app.db")
 
 # 2. Fix the Protocol for SQLAlchemy

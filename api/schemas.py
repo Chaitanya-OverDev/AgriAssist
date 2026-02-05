@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 import re
 
-# --- Shared Validator Function (Optional, avoids duplication) ---
+# --- Shared Validator Function ---
 def validate_indian_phone(v):
     v = v.strip()
     if not v: raise ValueError("Phone number cannot be blank")
@@ -25,7 +25,6 @@ class VerifyOTPSchema(BaseModel):
     phone_number: str
     otp: str
 
-    # ADDED VALIDATION HERE
     @field_validator('phone_number')
     def validate_phone(cls, v):
         return validate_indian_phone(v)
@@ -35,15 +34,39 @@ class UserResponse(BaseModel):
     id: int
     phone_number: str
     full_name: Optional[str] = "GuestUser"
-    
+
     # Farmer Fields
     has_farm: Optional[str] = None
     water_supply: Optional[str] = None
     farm_type: Optional[str] = None
-    
-    is_verified: bool   
+
+    is_verified: bool
     created_at: datetime
     updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+class CreateSessionSchema(BaseModel):
+    title: Optional[str] = "New Consultation"
+
+class MessageCreateSchema(BaseModel):
+    content: str
+
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class SessionResponse(BaseModel):
+    id: int
+    user_id: int
+    title: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
