@@ -5,6 +5,7 @@ import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/cloudy_background.dart';
 import '../../routes/app_routes.dart';
 import '../../services/api_service.dart';
+import '../../core/services/auth_service.dart'; // ✅ ADD THIS IMPORT
 
 class OtpScreen extends StatefulWidget {
   const OtpScreen({super.key});
@@ -35,6 +36,15 @@ class _OtpScreenState extends State<OtpScreen> {
     });
 
     bool success = await ApiService.verifyOtp(otp);
+
+    if (success) {
+      // ✅ SAVE LOGIN STATUS AND USER DATA
+      await AuthService.setLoggedIn(
+        true,
+        userId: ApiService.currentUserId,
+        phoneNumber: ApiService.currentPhoneNumber,
+      );
+    }
 
     setState(() => _isLoading = false);
 

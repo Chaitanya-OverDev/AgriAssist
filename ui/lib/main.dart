@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'routes/app_routes.dart';
+import 'services/api_service.dart';
 
-void main() {
-  // We no longer need async here because the Splash Screen
-  // will handle the AuthService check while the logo is showing.
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Initialize ApiService with stored user data BEFORE app starts
+  await ApiService.initializeFromStorage();
+
   runApp(const MyApp());
 }
 
@@ -16,8 +19,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'AgriAssist',
-      // Always start at Splash. The logic inside splash_screen.dart
-      // will now handle the redirect to VoiceChat or Phone.
       initialRoute: AppRoutes.splash,
       routes: AppRoutes.routes,
     );

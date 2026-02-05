@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // ✅ ADD THIS IMPORT
 import '../../core/theme/app_colors.dart';
 import '../../routes/app_routes.dart';
-import '../../core/services/auth_service.dart'; // 👈 Import your AuthService
+import '../../core/services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -18,7 +19,6 @@ class _SplashScreenState extends State<SplashScreen> {
     _startNavigationTimer();
   }
 
-  // Use a function to handle the async check
   void _startNavigationTimer() async {
     // 1. Wait for 2 seconds (for the logo to show)
     await Future.delayed(const Duration(seconds: 2));
@@ -30,8 +30,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // 3. Navigate to the correct screen
     if (loggedIn) {
+      if (kDebugMode) print("✅ User is logged in, redirecting to Voice Chat");
       Navigator.pushReplacementNamed(context, AppRoutes.voiceChat);
     } else {
+      if (kDebugMode) print("❌ User is NOT logged in, starting onboarding");
       Navigator.pushReplacementNamed(context, AppRoutes.phone);
     }
   }

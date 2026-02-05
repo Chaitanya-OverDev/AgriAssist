@@ -1,15 +1,29 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // ✅ This includes kDebugMode
 import 'package:http/http.dart' as http;
+import '../core/services/auth_service.dart'; // ✅ ADD THIS IMPORT
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
   //static const String baseUrl = 'https://agriassist-cxng.onrender.com';
-  static const String baseUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl = 'http://10.108.2.174:8000';
 
   // Store data temporarily for the session (volatile memory)
   static String? currentPhoneNumber;
   static int? currentUserId;
+
+  // ✅ ADD THIS METHOD (Make sure it exists)
+  static Future<void> initializeFromStorage() async {
+    currentUserId = await AuthService.getUserId();
+    currentPhoneNumber = await AuthService.getPhoneNumber();
+
+    if (kDebugMode) {
+      print("📱 ApiService initialized from storage:");
+      print("   User ID: $currentUserId");
+      print("   Phone: $currentPhoneNumber");
+    }
+  }
+
 
   // --- 1. Send OTP ---
   static Future<bool> sendOtp(String phone) async {
@@ -134,6 +148,46 @@ class ApiService {
       }
     } catch (e) {
       if (kDebugMode) print("Exception Send Message: $e");
+      return null;
+    }
+  }
+
+
+// --- 6. Gemini Text-to-Speech (TTS) ---
+  static Future<Uint8List?> generateSpeech(String text) async {
+    final url = Uri.parse('https://texttospeech.googleapis.com/v1/text:synthesize');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer YOUR_GEMINI_API_KEY", // You need an API key
+        },
+        body: jsonEncode({
+          "input": {"text": text},
+          "voice": {
+            "languageCode": "en-US",
+            "name": "en-US-Neural2-J",
+            "ssmlGender": "MALE"
+          },
+          "audioConfig": {
+            "audioEncoding": "MP3",
+            "speakingRate": 1.0,
+            "pitch": 0.0,
+            "volumeGainDb": 0.0
+          }
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final audioContent = data['audioContent'];
+        return base64Decode(audioContent);
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print("Exception TTS: $e");
       return null;
     }
   }

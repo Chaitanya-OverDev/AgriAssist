@@ -19,6 +19,7 @@ class _NameScreenState extends State<NameScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // name_screen.dart - Update _submitName method
   Future<void> _submitName() async {
     final name = _nameController.text.trim();
 
@@ -38,8 +39,13 @@ class _NameScreenState extends State<NameScreen> {
       // 1. Update Profile on Backend
       await ApiService.updateUserProfile({"full_name": name});
 
-      // 2. Remember the user locally
-      await AuthService.setLoggedIn(true);
+      // 2. ✅ Update local storage with user name
+      await AuthService.setLoggedIn(
+        true,
+        userId: ApiService.currentUserId,
+        phoneNumber: ApiService.currentPhoneNumber,
+        userName: name, // 👈 Save the name too
+      );
 
       if (mounted) {
         // 3. Clear the whole stack and go to Voice Chat
