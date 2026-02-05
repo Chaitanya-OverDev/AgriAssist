@@ -1,7 +1,12 @@
+import os
 from fastapi import FastAPI, Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
 from datetime import timedelta
 import random
+from dotenv import load_dotenv 
+from pydantic import BaseModel 
+from google import genai 
+from google.genai import types
 
 # Corrected Imports
 from db import models
@@ -9,10 +14,24 @@ from db.database import engine, get_db
 from db.models import User, OTP, get_ist_time
 from api import schemas 
 
+# --- CONFIGURATION: Load API Key & Initialize Gemini ---
+load_dotenv() # Load variables from .env file
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    print("WARNING: GEMINI_API_KEY is missing in .env file")
+
+# Initialize Gemini Client
+client = genai.Client(api_key=GEMINI_API_KEY)
+
 # Create DB Tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Farmer Chatbot API")
+
+# --- Request Model for Chat (Defined here for simplicity) ---
+class ChatRequest(BaseModel):
+    message: str
 
 # --- 1. Send OTP Endpoint (No Code in Response) ---
 @app.post("/auth/send-otp")
@@ -132,3 +151,28 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "User deleted successfully"}
+
+# --- 7. NEW: Chat with Gemini Endpoint ---
+@app.post("/chat/send")
+async def chat_with_gemini(request: ChatRequest):
+    """
+    Receives a message string, sends it to Gemini 3 Flash Preview, 
+    and returns the AI response.
+    """
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API Key not configured on server.")
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=request.message,
+            config=types.GenerateContentConfig(
+                temperature=0.7, 
+            )
+        )
+        return {"response": response.text}
+
+    except Exception as e:
+        print(f"Error calling Gemini: {e}")
+        # Return a generic error to client, log specific error to console
+        raise HTTPException(status_code=500, detail=f"AI Service Error: {str(e)}")
