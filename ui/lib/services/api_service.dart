@@ -5,8 +5,8 @@ import '../core/services/auth_service.dart'; // ✅ ADD THIS IMPORT
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
-  //static const String baseUrl = 'https://agriassist-cxng.onrender.com';
-  static const String baseUrl = 'http://10.108.2.174:8000';
+  static const String baseUrl = 'https://agriassist-cxng.onrender.com';
+  //static const String baseUrl = 'http://10.0.2.2:8000';
 
   // Store data temporarily for the session (volatile memory)
   static String? currentPhoneNumber;
