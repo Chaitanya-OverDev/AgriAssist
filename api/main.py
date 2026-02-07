@@ -1,14 +1,18 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Form
+from fastapi import FastAPI, Depends, HTTPException, status, Form, Response
 from sqlalchemy.orm import Session
 from datetime import timedelta
 import random
 import os
 from dotenv import load_dotenv
 import re
+import base64
+import io
+import wave
 
 # Google GenAI Imports
 from google import genai
 from google.genai import types
+from google.genai.types import HarmCategory, HarmBlockThreshold
 
 # Local Imports
 from db import models
@@ -320,3 +324,141 @@ def get_chat_history(session_id: int, user_id: int, db: Session = Depends(get_db
 
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()).all()
     return messages
+
+# --- 11. Delete Session along with messages ---
+@app.delete("/chat/sessions/{session_id}", status_code=status.HTTP_200_OK)
+def delete_chat_session(
+        session_id: int,
+        user_id: int,
+        db: Session = Depends(get_db)
+):
+    # 1. Query the session, ensuring it belongs to the requesting user_id
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == user_id
+    ).first()
+
+    # 2. If not found (or belongs to another user), raise 404
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found or you do not have permission to delete it"
+        )
+
+    # 3. Delete and Commit
+    try:
+        db.delete(session)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+    return {"message": "Chat session and history deleted successfully"}
+
+
+# ---Helper: Cleaning for text ---
+def clean_text_for_tts(text: str) -> str:
+    if not text: return ""
+
+    # 1. Replace newlines with periods so the TTS pauses instead of choking
+    text = text.replace('\n', '. ')
+
+    # 2. Remove markdown symbols (*, #, _, ~, `)
+    text = re.sub(r'[\*#_`~]', '', text)
+
+    # 3. Remove links [text](url) -> text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+
+    # 4. Collapse multiple spaces/dots
+    text = re.sub(r'\.+', '.', text)
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+# --- 12. TTS Endpoint ---
+@app.get("/chat/message/{message_id}/tts")
+def generate_speech(
+        message_id: int,
+        user_id: int,
+        db: Session = Depends(get_db)
+):
+    # Fetch Message
+    message = db.query(ChatMessage).join(ChatSession).filter(
+        ChatMessage.id == message_id,
+        ChatSession.user_id == user_id
+    ).first()
+
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Clean Text
+    clean_text = clean_text_for_tts(message.content)
+    # print(f"DEBUG: TTS Input Text: {clean_text}") # Check your terminal
+
+    if not clean_text or len(clean_text) < 2:
+        raise HTTPException(status_code=400, detail="Text is empty")
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-preview-tts",
+            contents=clean_text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name="Kore"
+                        )
+                    )
+                ),
+                safety_settings=[
+                    types.SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    types.SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    types.SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    types.SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                ]
+            )
+        )
+
+        if not response.candidates:
+            raise HTTPException(status_code=500, detail="No candidates returned")
+
+        if not response.candidates[0].content:
+            finish_reason = response.candidates[0].finish_reason
+            print(f"DEBUG: Still Blocked! Reason: {finish_reason}")
+            raise HTTPException(status_code=400, detail=f"TTS Blocked. Reason: {finish_reason}")
+
+        audio_content = response.candidates[0].content.parts[0].inline_data.data
+
+        if isinstance(audio_content, str):
+            audio_bytes = base64.b64decode(audio_content)
+        else:
+            audio_bytes = audio_content
+
+        # Convert to WAV
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(24000)
+            wav_file.writeframes(audio_bytes)
+
+        final_wav_data = wav_buffer.getvalue()
+
+        return Response(content=final_wav_data, media_type="audio/wav")
+
+    except Exception as e:
+        print(f"TTS Exception: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
