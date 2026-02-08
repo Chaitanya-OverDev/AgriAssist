@@ -10,7 +10,7 @@ import '../features/onboarding/name_screen.dart';
 // Chat Feature Imports
 import '../features/chat/voice_chat_screen.dart';
 import '../features/chat/bot_listening_screen.dart';
-import '../features/chat/text_chat_screen.dart';
+import '../features/chat/text_chat/text_chat_screen.dart';
 import '../features/chat/settings_screen.dart'; // 👈 ADD THIS
 
 class AppRoutes {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'text_chat_screen.dart';
+import './text_chat/text_chat_screen.dart';
 
 class BotListeningScreen extends StatefulWidget {
   const BotListeningScreen({super.key});

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // ✅ Added for exit app
 import 'bot_listening_screen.dart';
-import 'text_chat_screen.dart';
+import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
 
 class VoiceChatScreen extends StatelessWidget {
