@@ -11,8 +11,8 @@ class ChatMessageWidgets {
     required ChatAudioService audioService,
     required Function(String) onCopyPressed,
   }) {
+    // Check if this specific message is playing
     final isPlaying = audioService.playingMessageIndex == index;
-    final isLoadingAudio = isPlaying && audioService.isFetchingAudio;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -50,19 +50,18 @@ class ChatMessageWidgets {
               child: Row(
                 children: [
                   _actionButton(
-                    child: isLoadingAudio
-                        ? const SizedBox(
-                        width: 12, height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0E3D3D))
-                    )
-                        : Icon(
+                    child: Icon(
                       isPlaying ? Icons.stop : Icons.volume_up,
                       size: 18,
                       color: isPlaying ? Colors.red : const Color(0xFF0E3D3D),
                     ),
                     color: isPlaying ? Colors.red : const Color(0xFF0E3D3D),
                     tooltip: isPlaying ? 'Stop' : 'Listen',
-                    onPressed: () => audioService.handleAudioPlay(index, messageId),
+                    onPressed: () {
+                      // Pass the raw markdown text to the service.
+                      // The service will handle cleaning it before speaking.
+                      audioService.play(text, index);
+                    },
                   ),
                   const SizedBox(width: 10),
                   _actionButton(
