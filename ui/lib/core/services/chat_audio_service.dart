@@ -5,10 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 class ChatAudioService {
   final FlutterTts _flutterTts = FlutterTts();
 
-  // Track which message index is currently speaking
   int? _playingMessageIndex;
-
-  // Listener to notify UI to rebuild (for icon changes)
   VoidCallback? _onPlayingIndexChanged;
 
   ChatAudioService() {
@@ -16,13 +13,13 @@ class ChatAudioService {
   }
 
   void _initTts() async {
-    // Basic Configuration
-    await _flutterTts.setLanguage("en-IN"); // Default to Indian English
-    await _flutterTts.setSpeechRate(0.5);   // Normal speed
+    // We set a generic default here, but the 'play' method will override it
+    await _flutterTts.setLanguage("mr-IN");
+    await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
 
-    // Platform specific tweaks for iOS background audio
+    // iOS background audio settings
     if (!kIsWeb && Platform.isIOS) {
       await _flutterTts.setSharedInstance(true);
       await _flutterTts.setIosAudioCategory(
@@ -34,32 +31,23 @@ class ChatAudioService {
       );
     }
 
-    // --- Handlers ---
-
-    _flutterTts.setStartHandler(() {
-      _onPlayingIndexChanged?.call();
-    });
-
+    // Handlers
+    _flutterTts.setStartHandler(() => _onPlayingIndexChanged?.call());
     _flutterTts.setCompletionHandler(() {
       _playingMessageIndex = null;
       _onPlayingIndexChanged?.call();
     });
-
     _flutterTts.setCancelHandler(() {
       _playingMessageIndex = null;
       _onPlayingIndexChanged?.call();
     });
-
     _flutterTts.setErrorHandler((msg) {
-      debugPrint("TTS Error: $msg");
       _playingMessageIndex = null;
       _onPlayingIndexChanged?.call();
     });
   }
 
-  // --- Public Getters ---
   int? get playingMessageIndex => _playingMessageIndex;
-  bool get isFetchingAudio => false;
 
   void addPlayingIndexListener(VoidCallback listener) {
     _onPlayingIndexChanged = listener;
@@ -69,30 +57,25 @@ class ChatAudioService {
     _onPlayingIndexChanged = null;
   }
 
-  // --- Playback Logic ---
-
-  Future<void> play(String rawText, int index) async {
-    // 1. Toggle behavior: if clicking the same index, stop it.
+  // UPDATED: Now accepts 'languageCode'
+  Future<void> play(String rawText, int index, {String languageCode = "mr-IN"}) async {
     if (_playingMessageIndex == index) {
       await stop();
       return;
     }
 
-    // 2. Stop any currently playing audio
     await stop();
-
-    // 3. Update state to show "playing" icon
     _playingMessageIndex = index;
     _onPlayingIndexChanged?.call();
 
-    // 4. Clean the text to remove Markdown symbols
+    // 1. Set the language dynamically
+    await _flutterTts.setLanguage(languageCode);
+
+    // 2. Clean text
     String spokenText = _cleanMarkdown(rawText);
+    if (spokenText.trim().isEmpty) spokenText = "maiti uplabdh nahi"; // "Info not available" in Marathi
 
-    if (spokenText.trim().isEmpty) {
-      spokenText = "Content is not readable text.";
-    }
-
-    // 5. Speak
+    // 3. Speak
     await _flutterTts.speak(spokenText);
   }
 
@@ -107,36 +90,17 @@ class ChatAudioService {
     _onPlayingIndexChanged = null;
   }
 
-  // --- Utility: Markdown Cleaner ---
-
   String _cleanMarkdown(String text) {
     text = text.replaceAll(RegExp(r'```[\s\S]*?```'), '');
-
-    text = text.replaceAllMapped(RegExp(r'`([^`]+)`'), (match) {
-      return match.group(1) ?? "";
-    });
-
-    text = text.replaceAllMapped(RegExp(r'\[(.*?)\]\(.*?\)'), (match) {
-      return match.group(1) ?? "";
-    });
-
-    text = text.replaceAllMapped(RegExp(r'(\*\*|__)(.*?)\1'), (match) {
-      return match.group(2) ?? "";
-    });
-
-    text = text.replaceAllMapped(RegExp(r'(\*|_)(.*?)\1'), (match) {
-      return match.group(2) ?? "";
-    });
-
+    text = text.replaceAllMapped(RegExp(r'`([^`]+)`'), (match) => match.group(1) ?? "");
+    text = text.replaceAllMapped(RegExp(r'\[(.*?)\]\(.*?\)'), (match) => match.group(1) ?? "");
+    text = text.replaceAllMapped(RegExp(r'(\*\*|__)(.*?)\1'), (match) => match.group(2) ?? "");
+    text = text.replaceAllMapped(RegExp(r'(\*|_)(.*?)\1'), (match) => match.group(2) ?? "");
     text = text.replaceAll(RegExp(r'^#+\s+', multiLine: true), '');
-
     text = text.replaceAll(RegExp(r'^>\s+', multiLine: true), '');
-
     text = text.replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '');
     text = text.replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '');
-
     text = text.replaceAll(RegExp(r'!\[(.*?)\]\(.*?\)'), '');
-
     return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }

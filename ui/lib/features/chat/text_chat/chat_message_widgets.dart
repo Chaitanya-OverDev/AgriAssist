@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'chat_audio_service.dart';
+import 'package:agriassist/core/services/chat_audio_service.dart';
+
 
 class ChatMessageWidgets {
   static Widget botBubble({
