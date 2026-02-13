@@ -43,7 +43,6 @@ class _TextChatScreenState extends State<TextChatScreen> {
     _restoreUserFromStorage();
     _setupAudioListeners();
 
-    // 1. Restore Passed History (From Voice Chat)
     if (widget.passedSessionId != null) {
       activeSessionId = widget.passedSessionId;
     }
@@ -51,20 +50,18 @@ class _TextChatScreenState extends State<TextChatScreen> {
       setState(() {
         messages = List.from(widget.passedMessages!);
       });
-      // Scroll to bottom after the UI builds
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
 
-    // 2. Handle Prefilled Query (From Dashboard Shortcuts)
-    // Only run if we didn't just inherit a voice chat history
+    // Handle Prefilled Query logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.prefilledQuery != null &&
           widget.prefilledQuery!.isNotEmpty &&
           !_hasSentPrefilledQuery &&
           messages.isEmpty) {
 
-        // Small delay to ensure smooth transition
-        Future.delayed(const Duration(milliseconds: 800), () {
+        // Trigger message after a short delay for smooth UI transition
+        Future.delayed(const Duration(milliseconds: 400), () {
           if (mounted && !_hasSentPrefilledQuery) {
             _hasSentPrefilledQuery = true;
             controller.text = widget.prefilledQuery!;
@@ -120,7 +117,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
       }
 
       if (activeSessionId == null) {
-        int? newSessionId = await ApiService.createSession("New Consultation");
+        int? newSessionId = await ApiService.createSession("Consultation: $text");
         if (newSessionId != null) activeSessionId = newSessionId;
         else throw Exception("Failed to create chat session.");
       }
@@ -145,7 +142,6 @@ class _TextChatScreenState extends State<TextChatScreen> {
           });
         });
       }
-
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -269,7 +265,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
         children: [
           const Icon(Icons.chat_bubble_outline, size: 50, color: Color(0xFF0E3D3D)),
           const SizedBox(height: 10),
-          const Text("Start a conversation", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("How can I help you today?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );

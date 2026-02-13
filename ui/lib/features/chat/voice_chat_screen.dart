@@ -11,7 +11,7 @@ class VoiceChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        SystemNavigator.pop(); // Exit app on back press
+        SystemNavigator.pop();
         return false;
       },
       child: Scaffold(
@@ -49,17 +49,17 @@ class VoiceChatScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _optionCard('🌦️ Weather Report'),
+                      _optionCard(context, '🌦️ Weather Report'),
                       const SizedBox(width: 12),
-                      _optionCard('💰 Bazaar Bhav'),
+                      _optionCard(context, '💰 Bazaar Bhav'),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _optionCard('🌱 Crop Advice'),
+                      _optionCard(context, '🌱 Crop Advice'),
                       const SizedBox(width: 12),
-                      _optionCard('🐄 Livestock Care'),
+                      _optionCard(context, '🐄 Livestock Care'),
                     ],
                   ),
                 ],
@@ -103,7 +103,6 @@ class VoiceChatScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 60),
               child: Row(
                 children: [
-                  // CHAT BUTTON (Now on the Left)
                   Expanded(
                     child: Center(
                       child: GestureDetector(
@@ -120,7 +119,7 @@ class VoiceChatScreen extends StatelessWidget {
                           height: 54,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: const Color(0xFFF5FBF9), // Light white shade
+                            color: const Color(0xFFF5FBF9),
                             border: Border.all(color: const Color(0xFFB5CAC1), width: 1),
                             boxShadow: [
                               BoxShadow(
@@ -133,14 +132,13 @@ class VoiceChatScreen extends StatelessWidget {
                           child: const Icon(
                             Icons.message_outlined,
                             color: Color(0xFF13383A),
-                            size: 26, // Exact sizing
+                            size: 26,
                           ),
                         ),
                       ),
                     ),
                   ),
 
-                  // MIC BUTTON (Perfectly Centered)
                   GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -167,12 +165,11 @@ class VoiceChatScreen extends StatelessWidget {
                       child: const Icon(
                         Icons.mic,
                         color: Colors.white,
-                        size: 36, // Exact sizing
+                        size: 36,
                       ),
                     ),
                   ),
 
-                  // Right Spacer to keep Mic in the middle
                   const Expanded(child: SizedBox()),
                 ],
               ),
@@ -183,29 +180,40 @@ class VoiceChatScreen extends StatelessWidget {
     );
   }
 
-  /// 🔹 OPTION CARD
-  Widget _optionCard(String title) {
+  Widget _optionCard(BuildContext context, String title) {
     return Expanded(
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TextChatScreen(
+                prefilledQuery: title,
+              ),
             ),
-          ],
-        ),
-        child: Center(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF13383A),
+          );
+        },
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF13383A),
+              ),
             ),
           ),
         ),
