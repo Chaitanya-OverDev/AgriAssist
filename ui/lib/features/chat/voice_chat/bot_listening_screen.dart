@@ -238,10 +238,19 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
                     ),
                     Row(
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.notifications_none, color: Color(0xFF13383A), size: 30),
-                          onPressed: () {},
+                        // Display the selected language text
+                        Text(
+                          _languages.entries
+                              .firstWhere((e) => e.value == _selectedLocaleId)
+                              .key
+                              .split(' ')[0], // Gets just the native name (e.g., मराठी)
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF13383A),
+                          ),
                         ),
+                        const SizedBox(width: 4),
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
                           onSelected: (val) {
@@ -251,7 +260,9 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
                               Future.delayed(const Duration(milliseconds: 200), _startListening);
                             });
                           },
-                          itemBuilder: (ctx) => _languages.entries.map((e) => PopupMenuItem(value: e.value, child: Text(e.key))).toList(),
+                          itemBuilder: (ctx) => _languages.entries
+                              .map((e) => PopupMenuItem(value: e.value, child: Text(e.key)))
+                              .toList(),
                         ),
                       ],
                     ),
@@ -281,17 +292,34 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: Alignment.center,
                   child: RichText(
                     text: TextSpan(
                       style: const TextStyle(fontSize: 16, color: Colors.black54, height: 1.4),
                       children: [
+                        // The Status Text (e.g., Listening...)
                         TextSpan(
-                          text: "$_statusText ",
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                          text: "$_statusText",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF13383A), // Dark green to match theme
+                            fontSize: 18,
+                          ),
                         ),
+
+                        // New Line + Vertical spacing
+                        const TextSpan(text: "\n"),
+
+                        // The Spoken Text
                         TextSpan(
-                          text: _userTranscript.isEmpty && _isMicActive ? "काहीतरी बोला..." : _userTranscript,
+                          text: _userTranscript.isEmpty && _isMicActive
+                              ? "काहीतरी बोला..."
+                              : _userTranscript,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.black87,
+                          ),
                         ),
                       ],
                     ),
