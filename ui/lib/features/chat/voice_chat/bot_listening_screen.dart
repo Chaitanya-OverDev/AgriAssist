@@ -25,12 +25,10 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   bool _isMicActive = false;
   bool _isProcessing = false;
 
-  // --- LANGUAGE CONFIGURATION ---
-  // ✅ Changed Default to Marathi
   String _selectedLocaleId = "mr-IN";
 
   final Map<String, String> _languages = {
-    "मराठी (Marathi)": "mr-IN", // Put Marathi first
+    "मराठी (Marathi)": "mr-IN",
     "हिंदी (Hindi)": "hi-IN",
     "English": "en-IN",
   };
@@ -49,7 +47,7 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
-    )..repeat();
+    );
     _rippleAnim = CurvedAnimation(parent: _rippleController, curve: Curves.easeOutCubic);
   }
 
@@ -69,25 +67,23 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   }
 
   void _startListening() {
-    if (_isProcessing) return; // Don't listen if thinking
+    if (_isProcessing) return;
 
     if (mounted) {
       setState(() {
         _isMicActive = true;
         _statusText = "Listening (${_getLanguageShortName()})...";
         _userTranscript = "";
-        _rippleController.repeat();
       });
     }
 
     _sttService.listen(
-      localeId: _selectedLocaleId, //  Uses Marathi by default
+      localeId: _selectedLocaleId,
       onResult: (text) {
         if (mounted) setState(() => _userTranscript = text);
       },
     );
 
-    // Watch for silence/completion
     Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -104,13 +100,12 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     if (mounted) {
       setState(() {
         _isMicActive = false;
-        _rippleController.stop();
       });
     }
 
     if (_userTranscript.trim().isEmpty) {
       if (mounted) {
-        setState(() => _statusText = "काहीही ऐकू आले नाही."); // "Heard nothing" in Marathi
+        setState(() => _statusText = "काहीही ऐकू आले नाही.");
         Future.delayed(const Duration(seconds: 2), _startListening);
       }
       return;
@@ -124,7 +119,7 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     if (mounted) {
       setState(() {
         _isProcessing = true;
-        _statusText = "विचार करत आहे..."; // "Thinking..." in Marathi
+        _statusText = "विचार करत आहे...";
       });
     }
 
@@ -141,11 +136,11 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
           _messages.add({"role": "bot", "text": botText, "id": response['id']});
           await _speakResponse(botText);
         } else {
-          _speakError("सर्व्हर कनेक्ट करण्यात समस्या."); // Server error in Marathi
+          _speakError("सर्व्हर कनेक्ट करण्यात समस्या.");
         }
       }
     } catch (e) {
-      _speakError("काहीतरी चूक झाली."); // "Something went wrong"
+      _speakError("काहीतरी चूक झाली.");
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -154,12 +149,10 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   Future<void> _speakResponse(String text) async {
     if (mounted) {
       setState(() {
-        _statusText = "बोलत आहे..."; // "Speaking..."
-        _rippleController.repeat();
+        _statusText = "बोलत आहे...";
       });
     }
 
-    // ✅ Speak in Marathi (or selected language)
     await _ttsService.play(text, 999, languageCode: _selectedLocaleId);
 
     final completer = Completer();
@@ -173,7 +166,6 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     _ttsService.removePlayingIndexListener();
 
     if (mounted) {
-      _rippleController.stop();
       _startListening();
     }
   }
@@ -199,7 +191,6 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   }
 
   String _getLanguageShortName() {
-    // Returns "मराठी", "Hindi", etc.
     return _languages.entries
         .firstWhere((element) => element.value == _selectedLocaleId)
         .key.split(' ')[0];
@@ -215,145 +206,158 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
+    // Dynamic styles based on listening state
+    final Color micBgColor = _isMicActive ? Colors.red.shade700 : const Color(0xFF13383A);
+    final IconData micIcon = _isMicActive ? Icons.pause : Icons.mic;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFEAF8F1),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
-          onPressed: _goToTextChat,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFE4F6F0), Color(0xFFC7EBD9)],
+          ),
         ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF0E3D3D).withOpacity(0.2)),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedLocaleId,
-                icon: const Icon(Icons.language, color: Color(0xFF0E3D3D), size: 20),
-                items: _languages.entries.map((entry) {
-                  return DropdownMenuItem(
-                    value: entry.value,
-                    child: Text(
-                      entry.key.split(' ')[0],
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  if (newValue != null && !_isProcessing) {
-                    setState(() {
-                      _selectedLocaleId = newValue;
-                      _sttService.stop(); // Stop current listening
-                      // Small delay to let STT engine reset
-                      Future.delayed(const Duration(milliseconds: 200), _startListening);
-                    });
-                  }
-                },
-              ),
-            ),
-          )
-        ],
-      ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 20),
-
-          // --- RIPPLE ANIMATION ---
-          Stack(
-            alignment: Alignment.center,
+        child: SafeArea(
+          child: Column(
             children: [
-              AnimatedBuilder(
-                animation: _rippleAnim,
-                builder: (_, __) {
-                  final isAnimating = _isMicActive || (_statusText == "बोलत आहे...");
-                  if (!isAnimating) return const SizedBox();
-
-                  final scale = 1 + (_rippleAnim.value * 0.30);
-                  final opacity = (1 - _rippleAnim.value) * 0.5;
-                  return Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 200, height: 200,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.green.withOpacity(opacity), width: 6),
+              // --- APP BAR ---
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "AgriAssist",
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF13383A),
                       ),
                     ),
-                  );
-                },
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.notifications_none, color: Color(0xFF13383A), size: 30),
+                          onPressed: () {},
+                        ),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
+                          onSelected: (val) {
+                            setState(() {
+                              _selectedLocaleId = val;
+                              _sttService.stop();
+                              Future.delayed(const Duration(milliseconds: 200), _startListening);
+                            });
+                          },
+                          itemBuilder: (ctx) => _languages.entries.map((e) => PopupMenuItem(value: e.value, child: Text(e.key))).toList(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              CircleAvatar(
-                radius: 80,
-                backgroundColor: Colors.white,
-                backgroundImage: const AssetImage('assets/images/farmer_listening.png'),
+
+              const SizedBox(height: 50),
+
+              // --- CHARACTER AVATAR ---
+              Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFFB5CAC1), width: 20),
+                ),
+                child: ClipOval(
+                  child: Image.asset('assets/images/farmer_listening.png', fit: BoxFit.cover),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // --- TRANSCRIPT AREA ---
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 16, color: Colors.black54, height: 1.4),
+                      children: [
+                        TextSpan(
+                          text: "$_statusText ",
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        TextSpan(
+                          text: _userTranscript.isEmpty && _isMicActive ? "काहीतरी बोला..." : _userTranscript,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const Spacer(),
+
+              // --- ACTION BUTTONS ---
+              Padding(
+                padding: const EdgeInsets.only(bottom: 60),
+                child: Row(
+                  children: [
+                    const Expanded(child: SizedBox()),
+
+                    // MIC / PAUSE BUTTON
+                    GestureDetector(
+                      onTap: () => _isMicActive ? _sttService.stop() : _startListening(),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: micBgColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: micBgColor.withOpacity(0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Icon(micIcon, color: Colors.white, size: 36),
+                      ),
+                    ),
+
+                    // CLOSE BUTTON
+                    Expanded(
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: _goToTextChat,
+                          child: Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFE8D5D5),
+                              border: Border.all(color: const Color(0xFFD1B2B2), width: 1),
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Color(0xFFB24D4D),
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-
-          const SizedBox(height: 40),
-
-          // --- TRANSCRIPT ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: Column(
-              children: [
-                Text(
-                  _statusText,
-                  style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0E3D3D)
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  _userTranscript.isEmpty && _isMicActive
-                      ? "काहीतरी बोला..." // "Say something..." in Marathi
-                      : _userTranscript,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          // --- BUTTONS ---
-          Padding(
-            padding: const EdgeInsets.only(bottom: 50),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FloatingActionButton(
-                  backgroundColor: Colors.white,
-                  child: const Icon(Icons.keyboard, color: Colors.black),
-                  onPressed: _goToTextChat,
-                ),
-                const SizedBox(width: 20),
-                FloatingActionButton(
-                  backgroundColor: _isMicActive ? Colors.red : const Color(0xFF0E3D3D),
-                  child: Icon(_isMicActive ? Icons.stop : Icons.mic),
-                  onPressed: () {
-                    if (_isMicActive) {
-                      _sttService.stop();
-                    } else {
-                      _startListening();
-                    }
-                  },
-                ),
-              ],
-            ),
-          )
-        ],
+        ),
       ),
     );
   }
