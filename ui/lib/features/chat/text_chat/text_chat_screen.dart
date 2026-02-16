@@ -7,14 +7,21 @@ import '../../../routes/app_routes.dart';
 import '../settings_screen.dart';
 import '../../../services/api_service.dart';
 import '../../../core/services/auth_service.dart';
-import 'chat_audio_service.dart';
+import 'package:agriassist/core/services/chat_audio_service.dart';
 import 'chat_message_widgets.dart';
 import 'chat_input_widget.dart';
 
 class TextChatScreen extends StatefulWidget {
   final String? prefilledQuery;
+  final int? passedSessionId;
+  final List<Map<String, dynamic>>? passedMessages;
 
-  const TextChatScreen({super.key, this.prefilledQuery});
+  const TextChatScreen({
+    super.key,
+    this.prefilledQuery,
+    this.passedSessionId,
+    this.passedMessages,
+  });
 
   @override
   State<TextChatScreen> createState() => _TextChatScreenState();
@@ -36,11 +43,25 @@ class _TextChatScreenState extends State<TextChatScreen> {
     _restoreUserFromStorage();
     _setupAudioListeners();
 
+    if (widget.passedSessionId != null) {
+      activeSessionId = widget.passedSessionId;
+    }
+    if (widget.passedMessages != null) {
+      setState(() {
+        messages = List.from(widget.passedMessages!);
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
+
+    // Handle Prefilled Query logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.prefilledQuery != null &&
           widget.prefilledQuery!.isNotEmpty &&
-          !_hasSentPrefilledQuery) {
-        Future.delayed(const Duration(milliseconds: 800), () {
+          !_hasSentPrefilledQuery &&
+          messages.isEmpty) {
+
+        // Trigger message after a short delay for smooth UI transition
+        Future.delayed(const Duration(milliseconds: 400), () {
           if (mounted && !_hasSentPrefilledQuery) {
             _hasSentPrefilledQuery = true;
             controller.text = widget.prefilledQuery!;
@@ -96,7 +117,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
       }
 
       if (activeSessionId == null) {
-        int? newSessionId = await ApiService.createSession("New Consultation");
+        int? newSessionId = await ApiService.createSession("Consultation: $text");
         if (newSessionId != null) activeSessionId = newSessionId;
         else throw Exception("Failed to create chat session.");
       }
@@ -121,7 +142,6 @@ class _TextChatScreenState extends State<TextChatScreen> {
           });
         });
       }
-
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -195,7 +215,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              if (widget.prefilledQuery != null && _hasSentPrefilledQuery && messages.isEmpty)
+              if (isLoading && messages.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(8),
                   child: const LinearProgressIndicator(color: Color(0xFF0E3D3D)),
@@ -245,7 +265,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
         children: [
           const Icon(Icons.chat_bubble_outline, size: 50, color: Color(0xFF0E3D3D)),
           const SizedBox(height: 10),
-          const Text("Start a conversation", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("How can I help you today?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );
