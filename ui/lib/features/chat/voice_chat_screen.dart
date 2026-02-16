@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
 import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
-
-// Import your newly created Sidebar widget
 import '../../core/widgets/app_sidebar.dart';
 
 class VoiceChatScreen extends StatelessWidget {
@@ -19,10 +17,9 @@ class VoiceChatScreen extends StatelessWidget {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFEAF8F1),
-        drawer: const AppSidebar(), // 👈 ADDED THE SIDEBAR HERE
+        drawer: const AppSidebar(),
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          // 👈 ADDED LEADING MENU ICON TO OPEN SIDEBAR
           leading: Builder(
             builder: (context) {
               return IconButton(
