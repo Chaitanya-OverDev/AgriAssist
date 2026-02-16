@@ -28,6 +28,10 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+    <string>We need speech recognition to talk to the AgriBot.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>We need the microphone to hear your farming queries.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -9,8 +9,8 @@ import '../features/onboarding/name_screen.dart';
 
 // Chat Feature Imports
 import '../features/chat/voice_chat_screen.dart';
-import '../features/chat/bot_listening_screen.dart';
-import '../features/chat/text_chat_screen.dart';
+import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
+import '../features/chat/text_chat/text_chat_screen.dart';
 import '../features/chat/settings_screen.dart'; // 👈 ADD THIS
 
 class AppRoutes {
@@ -20,7 +20,7 @@ class AppRoutes {
   static const String personalization = '/personalization';
   static const String name = '/name';
   static const String voiceChat = '/voice-chat';
-  static const String botListening = '/bot-listening';
+  static const String botListening = '/voice_chat/bot_listening';
   static const String textChat = '/text-chat';
   static const String settings = '/settings'; // 👈 ADD THIS
 

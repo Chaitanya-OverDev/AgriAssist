@@ -1,34 +1,51 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // ✅ Added for exit app
-import 'bot_listening_screen.dart';
-import 'text_chat_screen.dart';
+import 'package:flutter/services.dart';
+import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
+import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
+
+// Import your newly created Sidebar widget
+import '../../core/widgets/app_sidebar.dart';
 
 class VoiceChatScreen extends StatelessWidget {
   const VoiceChatScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
     return WillPopScope(
       onWillPop: () async {
-        SystemNavigator.pop(); // ✅ Exit app on back press
+        SystemNavigator.pop();
         return false;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFEAF8F1),
+        drawer: const AppSidebar(), // 👈 ADDED THE SIDEBAR HERE
         appBar: AppBar(
           automaticallyImplyLeading: false,
+          // 👈 ADDED LEADING MENU ICON TO OPEN SIDEBAR
+          leading: Builder(
+            builder: (context) {
+              return IconButton(
+                icon: const Icon(Icons.menu, color: Color(0xFF13383A), size: 30),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+              );
+            },
+          ),
           title: const Text(
             'AgriAssist',
-            style: TextStyle(color: Colors.black),
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF13383A),
+            ),
           ),
-          backgroundColor: const Color(0xFFEAF8F1),
+          backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
             IconButton(
-              icon: const Icon(Icons.settings, color: Colors.black),
+              icon: const Icon(Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
               onPressed: () {
                 Navigator.pushNamed(context, AppRoutes.settings);
               },
@@ -36,7 +53,6 @@ class VoiceChatScreen extends StatelessWidget {
             const SizedBox(width: 12),
           ],
         ),
-
         body: Column(
           children: [
             const SizedBox(height: 20),
@@ -48,17 +64,17 @@ class VoiceChatScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _optionCard('🌦️ Weather Report'),
+                      _optionCard(context, '🌦️ Weather Report'),
                       const SizedBox(width: 12),
-                      _optionCard('💰 Bazaar Bhav'),
+                      _optionCard(context, '💰 Bazaar Bhav'),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _optionCard('🌱 Crop Advice'),
+                      _optionCard(context, '🌱 Crop Advice'),
                       const SizedBox(width: 12),
-                      _optionCard('🐄 Livestock Care'),
+                      _optionCard(context, '🐄 Livestock Care'),
                     ],
                   ),
                 ],
@@ -68,40 +84,44 @@ class VoiceChatScreen extends StatelessWidget {
             const Spacer(),
 
             /// 👨‍🌾 FARMER IMAGE
-            CircleAvatar(
-              radius: 90,
-              backgroundColor: Colors.white,
-              child: Image.asset(
-                'assets/images/farmer_character.png',
-                height: 130,
+            Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFB5CAC1), width: 20),
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/farmer_character.png',
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 40),
 
             const Text(
               'Click on mic to start talking...',
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.black54,
+                fontWeight: FontWeight.w500,
+              ),
             ),
 
             const Spacer(),
 
             /// 🎤 BOTTOM CONTROLS
-            SizedBox(
-              height: 90,
-              width: screenWidth,
-              child: Stack(
-                alignment: Alignment.center,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 60),
+              child: Row(
                 children: [
-                  /// 💬 MESSAGE ICON
-                  Positioned(
-                    left: screenWidth / 2 - 140,
-                    child: CircleAvatar(
-                      radius: 26,
-                      backgroundColor: Colors.white,
-                      child: IconButton(
-                        icon: const Icon(Icons.message, color: Colors.black87),
-                        onPressed: () {
+                  Expanded(
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -109,11 +129,31 @@ class VoiceChatScreen extends StatelessWidget {
                             ),
                           );
                         },
+                        child: Container(
+                          width: 54,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFF5FBF9),
+                            border: Border.all(color: const Color(0xFFB5CAC1), width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.message_outlined,
+                            color: Color(0xFF13383A),
+                            size: 26,
+                          ),
+                        ),
                       ),
                     ),
                   ),
 
-                  /// 🎤 MIC BUTTON
                   GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -123,42 +163,72 @@ class VoiceChatScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: const Color(0xFF0E3D3D),
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF13383A),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF13383A).withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
                       child: const Icon(
                         Icons.mic,
                         color: Colors.white,
-                        size: 32,
+                        size: 36,
                       ),
                     ),
                   ),
+
+                  const Expanded(child: SizedBox()),
                 ],
               ),
             ),
-
-            const SizedBox(height: 30),
           ],
         ),
       ),
     );
   }
 
-  /// 🔹 OPTION CARD
-  Widget _optionCard(String title) {
+  Widget _optionCard(BuildContext context, String title) {
     return Expanded(
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Center(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TextChatScreen(
+                prefilledQuery: title,
+              ),
+            ),
+          );
+        },
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF13383A),
+              ),
             ),
           ),
         ),
