@@ -22,8 +22,11 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
 
   String _statusText = "Initializing...";
   String _userTranscript = "";
+
+  // Clear state tracking
   bool _isMicActive = false;
   bool _isProcessing = false;
+  bool _isBotSpeaking = false; // Added to track when the bot is talking
 
   String _selectedLocaleId = "mr-IN";
 
@@ -44,11 +47,13 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   }
 
   void _initAnimation() {
+    // Set up the ripple animation to loop continuously
     _rippleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-    _rippleAnim = CurvedAnimation(parent: _rippleController, curve: Curves.easeOutCubic);
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(); // Automatically repeat the animation
+
+    _rippleAnim = CurvedAnimation(parent: _rippleController, curve: Curves.easeOut);
   }
 
   Future<void> _startConversationFlow() async {
@@ -67,7 +72,7 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   }
 
   void _startListening() {
-    if (_isProcessing) return;
+    if (_isProcessing || _isBotSpeaking) return;
 
     if (mounted) {
       setState(() {
@@ -118,7 +123,7 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   Future<void> _sendMessageToApi(String text) async {
     if (mounted) {
       setState(() {
-        _isProcessing = true;
+        _isProcessing = true; // Bot starts thinking
         _statusText = "विचार करत आहे...";
       });
     }
@@ -131,6 +136,9 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
       if (_activeSessionId != null) {
         final response = await ApiService.sendChatMessage(_activeSessionId!, text);
 
+        // Turn off processing BEFORE the bot starts speaking
+        if (mounted) setState(() => _isProcessing = false);
+
         if (response != null) {
           final botText = response['content'];
           _messages.add({"role": "bot", "text": botText, "id": response['id']});
@@ -140,15 +148,15 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
         }
       }
     } catch (e) {
-      _speakError("काहीतरी चूक झाली.");
-    } finally {
       if (mounted) setState(() => _isProcessing = false);
+      _speakError("काहीतरी चूक झाली.");
     }
   }
 
   Future<void> _speakResponse(String text) async {
     if (mounted) {
       setState(() {
+        _isBotSpeaking = true; // Bot starts talking
         _statusText = "बोलत आहे...";
       });
     }
@@ -166,6 +174,10 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     _ttsService.removePlayingIndexListener();
 
     if (mounted) {
+      setState(() {
+        _isBotSpeaking = false; // Bot finishes talking
+      });
+      // Automatically triggers the mic and ripple animation again
       _startListening();
     }
   }
@@ -204,12 +216,78 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     super.dispose();
   }
 
+  // Extracted logic for the dynamic animated mic button
+  Widget _buildDynamicMicButton() {
+    final bool isBusy = _isProcessing || _isBotSpeaking;
+    Color micBgColor;
+    Widget iconWidget;
+
+    // Determine visual state based on what the app is doing
+    if (_isProcessing) {
+      micBgColor = Colors.grey.shade600;
+      iconWidget = const SizedBox(
+        width: 30, height: 30,
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+      );
+    } else if (_isBotSpeaking) {
+      micBgColor = Colors.blue.shade600;
+      iconWidget = const Icon(Icons.volume_up_rounded, color: Colors.white, size: 36);
+    } else if (_isMicActive) {
+      micBgColor = Colors.red.shade700;
+      iconWidget = const Icon(Icons.mic, color: Colors.white, size: 36);
+    } else {
+      micBgColor = const Color(0xFF13383A);
+      iconWidget = const Icon(Icons.mic_none, color: Colors.white, size: 36);
+    }
+
+    return GestureDetector(
+      // Disable tap if processing or speaking
+      onTap: isBusy ? null : () => _isMicActive ? _sttService.stop() : _startListening(),
+      child: AnimatedBuilder(
+        animation: _rippleAnim,
+        builder: (context, child) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Show pulsing ripple ONLY when listening
+              if (_isMicActive)
+                Transform.scale(
+                  scale: 1.0 + (_rippleAnim.value * 0.6), // Scale grows outwards
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: micBgColor.withOpacity(1.0 - _rippleAnim.value), // Fades out
+                    ),
+                  ),
+                ),
+              // Main Button Core
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: micBgColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: micBgColor.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Center(child: iconWidget),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Dynamic styles based on listening state
-    final Color micBgColor = _isMicActive ? Colors.red.shade700 : const Color(0xFF13383A);
-    final IconData micIcon = _isMicActive ? Icons.pause : Icons.mic;
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -238,12 +316,11 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
                     ),
                     Row(
                       children: [
-                        // Display the selected language text
                         Text(
                           _languages.entries
                               .firstWhere((e) => e.value == _selectedLocaleId)
                               .key
-                              .split(' ')[0], // Gets just the native name (e.g., मराठी)
+                              .split(' ')[0],
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -294,23 +371,18 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
                 child: Align(
                   alignment: Alignment.center,
                   child: RichText(
+                    textAlign: TextAlign.center,
                     text: TextSpan(
                       style: const TextStyle(fontSize: 16, color: Colors.black54, height: 1.4),
                       children: [
-                        // The Status Text (e.g., Listening...)
                         TextSpan(
-                          text: "$_statusText",
+                          text: "$_statusText\n",
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF13383A), // Dark green to match theme
+                            color: Color(0xFF13383A),
                             fontSize: 18,
                           ),
                         ),
-
-                        // New Line + Vertical spacing
-                        const TextSpan(text: "\n"),
-
-                        // The Spoken Text
                         TextSpan(
                           text: _userTranscript.isEmpty && _isMicActive
                               ? "काहीतरी बोला..."
@@ -336,27 +408,8 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
                   children: [
                     const Expanded(child: SizedBox()),
 
-                    // MIC / PAUSE BUTTON
-                    GestureDetector(
-                      onTap: () => _isMicActive ? _sttService.stop() : _startListening(),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: micBgColor,
-                          boxShadow: [
-                            BoxShadow(
-                              color: micBgColor.withOpacity(0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Icon(micIcon, color: Colors.white, size: 36),
-                      ),
-                    ),
+                    // DYNAMIC MIC BUTTON INJECTED HERE
+                    _buildDynamicMicButton(),
 
                     // CLOSE BUTTON
                     Expanded(
