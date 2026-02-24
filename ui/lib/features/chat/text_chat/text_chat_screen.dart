@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt; // Add this import
 import '../../../routes/app_routes.dart';
 import '../settings_screen.dart';
 import '../../../services/api_service.dart';
@@ -32,6 +31,10 @@ class _TextChatScreenState extends State<TextChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final ChatAudioService _audioService = ChatAudioService();
 
+  // STT Variables
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+
   List<Map<String, dynamic>> messages = [];
   bool isLoading = false;
   int? activeSessionId;
@@ -40,12 +43,12 @@ class _TextChatScreenState extends State<TextChatScreen> {
   @override
   void initState() {
     super.initState();
+    _speech = stt.SpeechToText(); // Initialize speech object
     _restoreUserFromStorage();
     _setupAudioListeners();
 
-    if (widget.passedSessionId != null) {
+    if (widget.passedSessionId != null)
       activeSessionId = widget.passedSessionId;
-    }
     if (widget.passedMessages != null) {
       setState(() {
         messages = List.from(widget.passedMessages!);
@@ -53,14 +56,11 @@ class _TextChatScreenState extends State<TextChatScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
 
-    // Handle Prefilled Query logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.prefilledQuery != null &&
           widget.prefilledQuery!.isNotEmpty &&
           !_hasSentPrefilledQuery &&
           messages.isEmpty) {
-
-        // Trigger message after a short delay for smooth UI transition
         Future.delayed(const Duration(milliseconds: 400), () {
           if (mounted && !_hasSentPrefilledQuery) {
             _hasSentPrefilledQuery = true;
@@ -80,6 +80,32 @@ class _TextChatScreenState extends State<TextChatScreen> {
     super.dispose();
   }
 
+  // --- STT LOGIC ---
+  void _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize();
+      if (available) {
+        setState(() => _isListening = true);
+
+        // Start listening and update the text controller
+        _speech.listen(
+          onResult: (result) {
+            setState(() {
+              controller.text = result.recognizedWords;
+              // If the user stops talking, the library sets finalResult to true
+              if (result.finalResult) {
+                _isListening = false;
+              }
+            });
+          },
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
+
   void _setupAudioListeners() {
     _audioService.addPlayingIndexListener(() {
       if (mounted) setState(() {});
@@ -89,17 +115,18 @@ class _TextChatScreenState extends State<TextChatScreen> {
   Future<void> _restoreUserFromStorage() async {
     if (ApiService.currentUserId == null) {
       final storedUserId = await AuthService.getUserId();
-      if (storedUserId != null) {
+      if (storedUserId != null)
         setState(() {
           ApiService.currentUserId = storedUserId;
         });
-      }
     }
   }
 
   Future<void> sendMessage() async {
     String text = controller.text.trim();
     if (text.isEmpty) return;
+
+    if (_isListening) _speech.stop(); // Stop listening if user sends manually
 
     setState(() {
       messages.add({"role": "user", "text": text});
@@ -112,20 +139,28 @@ class _TextChatScreenState extends State<TextChatScreen> {
     try {
       if (ApiService.currentUserId == null) {
         final storedUserId = await AuthService.getUserId();
-        if (storedUserId != null) ApiService.currentUserId = storedUserId;
-        else throw Exception("User not logged in.");
+        if (storedUserId != null)
+          ApiService.currentUserId = storedUserId;
+        else
+          throw Exception("User not logged in.");
       }
 
       if (activeSessionId == null) {
-        int? newSessionId = await ApiService.createSession("Consultation: $text");
-        if (newSessionId != null) activeSessionId = newSessionId;
-        else throw Exception("Failed to create chat session.");
+        int? newSessionId = await ApiService.createSession(
+          "Consultation: $text",
+        );
+        if (newSessionId != null)
+          activeSessionId = newSessionId;
+        else
+          throw Exception("Failed to create chat session.");
       }
 
-      final responseMap = await ApiService.sendChatMessage(activeSessionId!, text);
+      final responseMap = await ApiService.sendChatMessage(
+        activeSessionId!,
+        text,
+      );
 
       if (!mounted) return;
-
       if (responseMap != null) {
         setState(() {
           messages.add({
@@ -134,22 +169,10 @@ class _TextChatScreenState extends State<TextChatScreen> {
             "id": responseMap['id'],
           });
         });
-      } else {
-        setState(() {
-          messages.add({
-            "role": "bot",
-            "text": "⚠️ Server Error: Could not get a response."
-          });
-        });
       }
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        messages.add({
-          "role": "bot",
-          "text": "❌ Error: ${e.toString()}"
-        });
-      });
+      if (mounted)
+        messages.add({"role": "bot", "text": "❌ Error: ${e.toString()}"});
     } finally {
       if (mounted) {
         setState(() {
@@ -157,19 +180,6 @@ class _TextChatScreenState extends State<TextChatScreen> {
         });
         _scrollToBottom();
       }
-    }
-  }
-
-  Future<void> _copyToClipboard(String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Copied to clipboard!'),
-          backgroundColor: Color(0xFF0E3D3D),
-          duration: Duration(seconds: 1),
-        ),
-      );
     }
   }
 
@@ -199,15 +209,19 @@ class _TextChatScreenState extends State<TextChatScreen> {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.black),
-            onPressed: () => Navigator.pushReplacementNamed(context, AppRoutes.voiceChat),
+            onPressed: () =>
+                Navigator.pushReplacementNamed(context, AppRoutes.voiceChat),
           ),
-          title: const Text("AgriAssist", style: TextStyle(color: Colors.black)),
+          title: const Text(
+            "AgriAssist",
+            style: TextStyle(color: Colors.black),
+          ),
           actions: [
             IconButton(
               icon: const Icon(Icons.settings, color: Colors.black),
               onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen())
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
               ),
             ),
           ],
@@ -216,32 +230,32 @@ class _TextChatScreenState extends State<TextChatScreen> {
           child: Column(
             children: [
               if (isLoading && messages.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  child: const LinearProgressIndicator(color: Color(0xFF0E3D3D)),
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: LinearProgressIndicator(color: Color(0xFF0E3D3D)),
                 ),
               Expanded(
-                child: messages.isEmpty && !isLoading
-                    ? _buildEmptyState()
-                    : ListView.builder(
+                child: ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length + (isLoading ? 1 : 0),
                   itemBuilder: (context, index) {
-                    if (index == messages.length) {
-                      return ChatMessageWidgets.typingBubble("Typing...", index);
-                    }
+                    if (index == messages.length)
+                      return ChatMessageWidgets.typingBubble(
+                        "Typing...",
+                        index,
+                      );
                     final msg = messages[index];
-                    if (msg["role"] == "user") {
+                    if (msg["role"] == "user")
                       return ChatMessageWidgets.userBubble(msg["text"]);
-                    }
                     return ChatMessageWidgets.botBubble(
                       context: context,
                       text: msg["text"],
                       index: index,
                       messageId: msg["id"],
                       audioService: _audioService,
-                      onCopyPressed: _copyToClipboard,
+                      onCopyPressed: (t) =>
+                          Clipboard.setData(ClipboardData(text: t)),
                     );
                   },
                 ),
@@ -249,24 +263,13 @@ class _TextChatScreenState extends State<TextChatScreen> {
               ChatInputWidget(
                 controller: controller,
                 onSendPressed: sendMessage,
+                onMicPressed: _listen, // Pass the listening function
+                isListening: _isListening, // Pass the listening state
                 isLoggedIn: ApiService.currentUserId != null,
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.chat_bubble_outline, size: 50, color: Color(0xFF0E3D3D)),
-          const SizedBox(height: 10),
-          const Text("How can I help you today?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ],
       ),
     );
   }
