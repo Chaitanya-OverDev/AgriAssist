@@ -70,3 +70,7 @@ class SessionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class LocationUpdateSchema(BaseModel):
+    latitude: float
+    longitude: float

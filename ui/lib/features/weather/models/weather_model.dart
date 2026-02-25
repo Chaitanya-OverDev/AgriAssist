@@ -1,25 +1,25 @@
 class WeatherModel {
   final String location;
-  final int todayTemp;
-  final String todayCondition;
   final List<DailyForecast> forecast;
 
   WeatherModel({
     required this.location,
-    required this.todayTemp,
-    required this.todayCondition,
     required this.forecast,
   });
 }
 
 class DailyForecast {
-  final String day;
-  final int temp;
+  final String date;
+  final double tempMax;
+  final double tempMin;
+  final double rainMm;
   final String condition;
 
   DailyForecast({
-    required this.day,
-    required this.temp,
+    required this.date,
+    required this.tempMax,
+    required this.tempMin,
+    required this.rainMm,
     required this.condition,
   });
 }

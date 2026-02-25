@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
-import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/services/location_service.dart';
 import 'models/weather_model.dart';
+import 'data/dummy_weather_data.dart'; // Adjust path as needed
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({Key? key}) : super(key: key);
@@ -15,49 +15,20 @@ class WeatherScreen extends StatefulWidget {
 
 class _WeatherScreenState extends State<WeatherScreen> {
   late Future<WeatherModel> _weatherFuture;
-
-  final LocationService _locationService = LocationService();
-  final DraggableScrollableController _sheetController =
-  DraggableScrollableController();
-
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
   double _sheetSize = 0.45;
 
   @override
   void initState() {
     super.initState();
-    _weatherFuture = _loadWeather();
+    // Instantly load dummy data
+    _weatherFuture = DummyWeatherData.getForecast();
 
-    /// Listen to sheet size
     _sheetController.addListener(() {
       setState(() {
         _sheetSize = _sheetController.size;
       });
     });
-  }
-
-  /// ===================================================
-  /// 🔁 THIS IS THE ONLY METHOD YOU REPLACE FOR API
-  /// ===================================================
-  Future<WeatherModel> _loadWeather() async {
-    Position position = await _locationService.getCurrentLocation();
-
-    double lat = position.latitude;
-    double lon = position.longitude;
-
-    await Future.delayed(const Duration(seconds: 1));
-
-    return WeatherModel(
-      location: "Your Location",
-      todayTemp: 29,
-      todayCondition: "Rain",
-      forecast: [
-        DailyForecast(day: "Wed", temp: 28, condition: "Cloudy"),
-        DailyForecast(day: "Thu", temp: 27, condition: "Rain"),
-        DailyForecast(day: "Fri", temp: 31, condition: "Sunny"),
-        DailyForecast(day: "Sat", temp: 29, condition: "Cloudy"),
-        DailyForecast(day: "Sun", temp: 30, condition: "Sunny"),
-      ],
-    );
   }
 
   @override
@@ -78,29 +49,28 @@ class _WeatherScreenState extends State<WeatherScreen> {
           child: FutureBuilder<WeatherModel>(
             future: _weatherFuture,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primary,
-                  ),
+                  child: CircularProgressIndicator(color: AppColors.primary),
                 );
               }
 
+              if (!snapshot.hasData) {
+                return const Center(child: Text("No weather data available"));
+              }
+
               final weather = snapshot.data!;
+              final today = weather.forecast.first;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-
-                    /// =========================
                     /// Top Bar
-                    /// =========================
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back,
-                              color: AppColors.primary),
+                          icon: const Icon(Icons.arrow_back, color: AppColors.primary),
                           onPressed: () => Navigator.pop(context),
                         ),
                         const Spacer(),
@@ -119,27 +89,21 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
                     const SizedBox(height: 10),
 
-                    /// =========================
-                    /// 🔥 Animated Today Section
-                    /// =========================
+                    /// Animated Today Section
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 250),
                       curve: Curves.easeOut,
-                      transform: Matrix4.identity()
-                        ..translate(0.0, (_sheetSize - 0.45) * -60),
+                      transform: Matrix4.identity()..translate(0.0, (_sheetSize - 0.45) * -60),
                       child: AnimatedScale(
                         duration: const Duration(milliseconds: 250),
                         scale: 1 - ((_sheetSize - 0.45) * 0.3),
                         child: AnimatedOpacity(
-                          duration:
-                          const Duration(milliseconds: 250),
-                          opacity:
-                          1 - ((_sheetSize - 0.45) * 0.6),
+                          duration: const Duration(milliseconds: 250),
+                          opacity: 1 - ((_sheetSize - 0.45) * 0.6),
                           child: Stack(
                             children: [
                               Column(
                                 children: [
-
                                   Text(
                                     weather.location,
                                     style: const TextStyle(
@@ -147,57 +111,41 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                       color: AppColors.textSecondary,
                                     ),
                                   ),
-
                                   const SizedBox(height: 30),
-
                                   Image.asset(
-                                    _getWeatherImage(
-                                        weather.todayCondition),
+                                    _getWeatherImage(today.condition),
                                     height: 140,
+                                    // Fallback if image not found: errorBuilder
+                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.cloud, size: 140, color: Colors.grey),
                                   ),
-
                                   const SizedBox(height: 20),
-
                                   Text(
-                                    "${weather.todayTemp}°C",
+                                    "${today.tempMax.toInt()}°C",
                                     style: const TextStyle(
                                       fontSize: 48,
-                                      fontWeight:
-                                      FontWeight.bold,
-                                      color:
-                                      AppColors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
-
                                   const SizedBox(height: 8),
-
                                   Text(
-                                    "Expect ${weather.todayCondition.toLowerCase()} today",
+                                    "Expect ${today.condition.toLowerCase()} today",
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: AppColors.textSecondary,
                                     ),
                                   ),
-
                                   const SizedBox(height: 20),
                                 ],
                               ),
-
-                              /// Blur Layer
                               if (_sheetSize > 0.55)
                                 Positioned.fill(
                                   child: BackdropFilter(
                                     filter: ImageFilter.blur(
-                                      sigmaX:
-                                      (_sheetSize - 0.55) *
-                                          15,
-                                      sigmaY:
-                                      (_sheetSize - 0.55) *
-                                          15,
+                                      sigmaX: (_sheetSize - 0.55) * 15,
+                                      sigmaY: (_sheetSize - 0.55) * 15,
                                     ),
-                                    child: Container(
-                                      color: Colors.transparent,
-                                    ),
+                                    child: Container(color: Colors.transparent),
                                   ),
                                 ),
                             ],
@@ -206,9 +154,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                       ),
                     ),
 
-                    /// =========================
                     /// Swipe Up Forecast Sheet
-                    /// =========================
                     Expanded(
                       child: DraggableScrollableSheet(
                         controller: _sheetController,
@@ -217,64 +163,42 @@ class _WeatherScreenState extends State<WeatherScreen> {
                         maxChildSize: 0.85,
                         builder: (context, scrollController) {
                           return Container(
-                            padding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 15),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                             decoration: const BoxDecoration(
                               color: Colors.white,
-                              borderRadius:
-                              BorderRadius.vertical(
-                                top: Radius.circular(30),
-                              ),
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
                             ),
                             child: Column(
                               children: [
-
-                                /// Grab Indicator
                                 Container(
                                   width: 50,
                                   height: 5,
                                   decoration: BoxDecoration(
-                                    color:
-                                    AppColors.borderDefault,
-                                    borderRadius:
-                                    BorderRadius.circular(
-                                        10),
+                                    color: AppColors.borderDefault,
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                 ),
-
                                 const SizedBox(height: 20),
-
                                 const Align(
-                                  alignment:
-                                  Alignment.centerLeft,
+                                  alignment: Alignment.centerLeft,
                                   child: Text(
                                     "Next 5 Days",
                                     style: TextStyle(
                                       fontSize: 18,
-                                      fontWeight:
-                                      FontWeight.w600,
-                                      color:
-                                      AppColors.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
                                 ),
-
                                 const SizedBox(height: 15),
-
                                 Expanded(
                                   child: ListView.builder(
-                                    controller:
-                                    scrollController,
-                                    itemCount:
-                                    weather.forecast
-                                        .length,
-                                    itemBuilder:
-                                        (context, index) {
-                                      return _forecastTile(
-                                          weather.forecast[
-                                          index]);
+                                    controller: scrollController,
+                                    itemCount: weather.forecast.length,
+                                    itemBuilder: (context, index) {
+                                      // Skip today (index 0) in the list if you only want the future days,
+                                      // but leaving it in matches your original logic.
+                                      return _forecastTile(weather.forecast[index]);
                                     },
                                   ),
                                 ),
@@ -294,14 +218,16 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Widget _forecastTile(DailyForecast weather) {
+  Widget _forecastTile(DailyForecast daily) {
+    // Convert "2026-02-25" to "Wed", "Thu"
+    DateTime parsedDate = DateTime.parse(daily.date);
+    String dayName = DateFormat('EEE').format(parsedDate);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 25),
-      padding: const EdgeInsets.symmetric(
-          horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color:
-        AppColors.bgGradientTop.withOpacity(0.6),
+        color: AppColors.bgGradientTop.withOpacity(0.6),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -316,7 +242,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              weather.day,
+              dayName,
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -328,15 +254,16 @@ class _WeatherScreenState extends State<WeatherScreen> {
             flex: 1,
             child: Center(
               child: Image.asset(
-                _getWeatherImage(weather.condition),
+                _getWeatherImage(daily.condition),
                 height: 40,
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.cloud, size: 30, color: Colors.grey),
               ),
             ),
           ),
           Expanded(
             flex: 1,
             child: Text(
-              "${weather.temp}°C",
+              "${daily.tempMax.toInt()}°C",
               textAlign: TextAlign.end,
               style: const TextStyle(
                 fontSize: 16,
@@ -353,15 +280,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
   String _getWeatherImage(String condition) {
     switch (condition.toLowerCase()) {
       case "sunny":
+      case "clear":
         return "assets/images/weather/sunny.png";
       case "cloudy":
+      case "clouds":
         return "assets/images/weather/cloudy.png";
       case "rain":
         return "assets/images/weather/rain.png";
       case "storm":
         return "assets/images/weather/storm.png";
       default:
-        return "assets/images/weather/default.png";
+        return "assets/images/weather/default.png"; // Make sure this asset exists
     }
   }
 }

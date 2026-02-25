@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text,Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import datetime
@@ -19,6 +19,12 @@ class User(Base):
     has_farm = Column(String, nullable=True)
     water_supply = Column(String, nullable=True)
     farm_type = Column(String, nullable=True)
+
+    # Location Data
+    state = Column(String, nullable=True)
+    district = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True) 
+    longitude = Column(Float, nullable=True) 
 
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -57,3 +63,28 @@ class ChatMessage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("ChatSession", back_populates="messages")
+
+class CommodityCache(Base):
+    __tablename__ = "commodity_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    state = Column(String, index=True, nullable=False)
+    district = Column(String, index=True, nullable=True) 
+    commodity = Column(String, index=True, nullable=False)
+    commodity_group = Column(String, nullable=True)
+    
+  
+    msp = Column(String, nullable=True)
+    price_latest = Column(String, nullable=True) 
+    price_mid = Column(String, nullable=True)    
+    price_old = Column(String, nullable=True)    
+    
+    scraped_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class WeatherCache(Base):
+    __tablename__ = "weather_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    forecast_data = Column(Text, nullable=False) 
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now())

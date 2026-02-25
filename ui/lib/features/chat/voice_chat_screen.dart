@@ -4,7 +4,9 @@ import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
 import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
 import '../../core/widgets/app_sidebar.dart';
-import '../../features/weather/weather_screen.dart';
+
+// Adjust this path if your weather_screen is in a different folder
+import '../weather/weather_screen.dart';
 
 class VoiceChatScreen extends StatelessWidget {
   const VoiceChatScreen({super.key});
@@ -24,8 +26,7 @@ class VoiceChatScreen extends StatelessWidget {
           leading: Builder(
             builder: (context) {
               return IconButton(
-                icon: const Icon(
-                    Icons.menu, color: Color(0xFF13383A), size: 30),
+                icon: const Icon(Icons.menu, color: Color(0xFF13383A), size: 30),
                 onPressed: () {
                   Scaffold.of(context).openDrawer();
                 },
@@ -44,8 +45,7 @@ class VoiceChatScreen extends StatelessWidget {
           elevation: 0,
           actions: [
             IconButton(
-              icon: const Icon(
-                  Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
+              icon: const Icon(Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
               onPressed: () {
                 Navigator.pushNamed(context, AppRoutes.settings);
               },
@@ -64,17 +64,33 @@ class VoiceChatScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _optionCard(context, '🌦️ Weather Report'),
+                      _optionCard(
+                          context,
+                          '🌦️ Weather Report',
+                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherScreen()))
+                      ),
                       const SizedBox(width: 12),
-                      _optionCard(context, '💰 Bazaar Bhav'),
+                      _optionCard(
+                          context,
+                          '💰 Bazaar Bhav',
+                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextChatScreen(prefilledQuery: '💰 Bazaar Bhav')))
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _optionCard(context, '🌱 Crop Advice'),
+                      _optionCard(
+                          context,
+                          '🌱 Crop Advice',
+                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextChatScreen(prefilledQuery: '🌱 Crop Advice')))
+                      ),
                       const SizedBox(width: 12),
-                      _optionCard(context, '🐄 Livestock Care'),
+                      _optionCard(
+                          context,
+                          '🐄 Livestock Care',
+                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextChatScreen(prefilledQuery: '🐄 Livestock Care')))
+                      ),
                     ],
                   ),
                 ],
@@ -135,8 +151,7 @@ class VoiceChatScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFFF5FBF9),
-                            border: Border.all(
-                                color: const Color(0xFFB5CAC1), width: 1),
+                            border: Border.all(color: const Color(0xFFB5CAC1), width: 1),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.05),
@@ -196,29 +211,10 @@ class VoiceChatScreen extends StatelessWidget {
     );
   }
 
-  Widget _optionCard(BuildContext context, String title) {
+  Widget _optionCard(BuildContext context, String title, VoidCallback onTap) {
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          if (title.contains('Weather')) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const WeatherScreen(),
-              ),
-            );
-          } else {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    TextChatScreen(
-                      prefilledQuery: title,
-                    ),
-              ),
-            );
-          }
-        },
+        onTap: onTap,
         child: Container(
           height: 64,
           decoration: BoxDecoration(
