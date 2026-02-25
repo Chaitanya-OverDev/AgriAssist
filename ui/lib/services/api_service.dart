@@ -1,19 +1,22 @@
 import 'dart:convert';
-import 'dart:typed_data'; // ✅ Required for Uint8List
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/services/auth_service.dart';
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
-  // static const String baseUrl = 'https://agriassist-cxng.onrender.com';
-  static const String baseUrl= 'http://10.0.2.2:8000';
-  //   static const String baseUrl= 'http://10.66.35.54:8000';
+  static const String baseUrl = 'https://agriassist-cxng.onrender.com';
+  // static const String baseUrl= 'http://10.0.2.2:8000';
+  //   static const String baseUrl= 'http://10.158.120.198:8000';
 
 
   // Store data temporarily
   static String? currentPhoneNumber;
   static int? currentUserId;
+
+  static Map<String, dynamic>? _cachedWeather;
+  static Map<String, dynamic>? _cachedMarketData;
 
   static Future<void> initializeFromStorage() async {
     currentUserId = await AuthService.getUserId();
@@ -256,4 +259,92 @@ class ApiService {
       return null;
     }
   }
+
+    // --- 10. Update User Location ---
+    static Future<bool> updateUserLocation(double lat, double lon) async {
+      if (currentUserId == null) return false;
+      final url = Uri.parse('$baseUrl/users/$currentUserId/location');
+      try {
+        final response = await http.post(
+          url,
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"latitude": lat, "longitude": lon}),
+        );
+        return response.statusCode == 200;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // --- 11. Get Weather Forecast (WITH CACHING) ---
+    static Future<Map<String, dynamic>?> getWeatherForecast({bool forceRefresh = false}) async {
+      if (currentUserId == null) return null;
+
+      // Return cached data immediately if it exists and we aren't forcing a refresh
+      if (!forceRefresh && _cachedWeather != null) {
+        if (kDebugMode) print("☁️ Returning CACHED Weather Data");
+        return _cachedWeather;
+      }
+
+      final url = Uri.parse('$baseUrl/weather/my-forecast/$currentUserId');
+      try {
+        final response = await http.get(url);
+        if (response.statusCode == 200) {
+          _cachedWeather = jsonDecode(response.body); // Save to cache
+          return _cachedWeather;
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // --- 12. Get Market Data (WITH CACHING) ---
+    static Future<Map<String, dynamic>?> getMarketData({bool forceRefresh = false}) async {
+      if (currentUserId == null) return null;
+
+      // Return cached data immediately if it exists
+      if (!forceRefresh && _cachedMarketData != null) {
+        if (kDebugMode) print("💰 Returning CACHED Market Data");
+        return _cachedMarketData;
+      }
+
+      // Using the State endpoint as requested
+      final url = Uri.parse('$baseUrl/market/my-state/$currentUserId');
+      try {
+        final response = await http.get(url);
+        if (response.statusCode == 200) {
+          _cachedMarketData = jsonDecode(response.body); // Save to cache
+          return _cachedMarketData;
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // --- 13. Preload Data on App Start ---
+    static Future<void> preloadDashboardData(double lat, double lon) async {
+      if (currentUserId == null) return;
+
+      if (kDebugMode) print("🚀 Starting silent preload sequence...");
+
+      // 1. Send location to backend
+      updateUserLocation(lat, lon).then((success) async {
+        if (success) {
+          if (kDebugMode) print("⏳ Location saved. Waiting 12 seconds before fetching market data...");
+
+          // 2. Wait 12 seconds
+          await Future.delayed(const Duration(seconds: 12));
+
+          if (kDebugMode) print("📥 Fetching Weather and Market data now...");
+
+          // 3. Fetch and cache the data
+          getWeatherForecast(forceRefresh: true);
+          getMarketData(forceRefresh: true);
+        } else {
+          if (kDebugMode) print("❌ Failed to update location, aborting preload.");
+        }
+      });
+    }
 }

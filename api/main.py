@@ -189,7 +189,7 @@ def get_user_sessions(user_id: int, db: Session = Depends(get_db)):
     return sessions
 
 # --- HELPER: SYSTEM INSTRUCTIONS ---
-def build_system_instruction(user: User):
+def build_system_instruction(user: User, db: Session):
     today = datetime.now().strftime("%d %B %Y")
 
     # ---------------- LOCATION & WEATHER ----------------
@@ -250,20 +250,21 @@ Current Date: {today} (Do NOT mention the date unless asked).
 FARMER PROFILE:
 {farm_details}
 
+SCOPE OF CAPABILITIES:
+1. **General Farming Advice:** You are a fully qualified agronomist. You MUST answer general questions about farming, crop diseases (e.g., tomato blight, pests), soil preparation, and cultivation techniques using your own extensive knowledge.
+2. **When to use Tools:** ONLY use the `get_weather_forecast` or `get_baazar_bhav` tools if the user explicitly asks for weather updates or current market prices. For everything else, answer directly without a tool.
+
 CORE BEHAVIOR:
-1. **Tone & Style:** Always be polite, respectful, and use a spoken-style (Hinglish/Hindi/English). 
-   Use markdown formatting (like **bolding**) to highlight important numbers or crop names.
-2. **Conciseness:** Keep answers relatively short (under 3-4 sentences) so voice playback is fast 
-   and text is easy to read.
-3. **Pesticides/Fertilizers:** Do NOT output recommendations unless specifically asked. 
-   If asked, provide the Chemical Name + Brand and Dosage (per 15L pump).
+1. **Tone & Style:** Always ask politely, be highly respectful, and use a friendly spoken-style (Hinglish/Hindi/English).
+2. **Formatting:** Do NOT remove formatting. You must use markdown formatting (like **bolding** and bullet points) to organize your response. The user is reading this in a chat interface, so it needs to look clean and structured.
+3. **Conciseness:** Keep answers relatively short (3-4 sentences) so voice playback is fast and text is easy to read.
+4. **Pesticides/Fertilizers:** If the user asks about a disease or pest, provide the Chemical Name + common Brand and Dosage (per 15L pump).
 
 MARKET PRICE TOOL RULES:
 Always extract the crop/commodity from the user's message before calling the Baazar Bhav tool.
 
 CRITICAL CROP NAME TRANSLATIONS:
 You MUST map the farmer's spoken Hindi/Marathi/English word to these EXACT official government names:
-
 * Pyaaz / Kanda / Onion -> "Onion"
 * Aloo / Batata / Potato -> "Potato"
 * Tamatar / Tomato -> "Tomato"
@@ -289,7 +290,7 @@ You MUST map the farmer's spoken Hindi/Marathi/English word to these EXACT offic
 * Bajra / Bajri / Pearl Millet -> "Bajra(Pearl Millet/Cumbu)"
 * Jowar / Sorghum -> "Jowar(Sorghum)"
 """
-
+  
 # --- 9. Send Message & Get Response ---
 @app.post("/chat/{session_id}/message", response_model=schemas.MessageResponse)
 def chat_with_gemini(
@@ -318,7 +319,7 @@ def chat_with_gemini(
         ))
 
     user = session.user
-    system_instruction = build_system_instruction(user)
+    system_instruction = build_system_instruction(user, db)
     
     generate_config = types.GenerateContentConfig(
         system_instruction=system_instruction,

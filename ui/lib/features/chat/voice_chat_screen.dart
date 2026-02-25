@@ -1,15 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
+import 'package:agriassist/features/market/market_screen.dart';
 import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
 import '../../core/widgets/app_sidebar.dart';
-
-// Adjust this path if your weather_screen is in a different folder
+import '../../core/services/location_service.dart';
+import 'package:agriassist/services/api_service.dart';
+import 'package:flutter/foundation.dart';
 import '../weather/weather_screen.dart';
 
-class VoiceChatScreen extends StatelessWidget {
+class VoiceChatScreen extends StatefulWidget {
   const VoiceChatScreen({super.key});
+
+  @override
+  State<VoiceChatScreen> createState() => _VoiceChatScreenState();
+}
+
+class _VoiceChatScreenState extends State<VoiceChatScreen> {
+  final LocationService _locationService = LocationService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Fire the preload sequence as soon as the screen loads
+    _silentlyPreloadData();
+  }
+
+  void _silentlyPreloadData() async {
+    try {
+      // 1. Get GPS coordinates
+      Position position = await _locationService.getCurrentLocation();
+
+      // 2. Trigger the sequence in ApiService
+      ApiService.preloadDashboardData(position.latitude, position.longitude);
+    } catch (e) {
+      if (kDebugMode) print("Location access denied or failed: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +102,7 @@ class VoiceChatScreen extends StatelessWidget {
                       _optionCard(
                           context,
                           '💰 Bazaar Bhav',
-                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextChatScreen(prefilledQuery: '💰 Bazaar Bhav')))
+                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MarketScreen()))
                       ),
                     ],
                   ),

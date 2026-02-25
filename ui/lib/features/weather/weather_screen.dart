@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:intl/intl.dart';
-
+import 'package:geolocator/geolocator.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/location_service.dart';
+import 'package:agriassist/services/api_service.dart';
 import 'models/weather_model.dart';
-import 'data/dummy_weather_data.dart'; // Adjust path as needed
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({Key? key}) : super(key: key);
@@ -15,20 +16,67 @@ class WeatherScreen extends StatefulWidget {
 
 class _WeatherScreenState extends State<WeatherScreen> {
   late Future<WeatherModel> _weatherFuture;
+  final LocationService _locationService = LocationService();
   final DraggableScrollableController _sheetController = DraggableScrollableController();
+
   double _sheetSize = 0.45;
 
   @override
   void initState() {
     super.initState();
-    // Instantly load dummy data
-    _weatherFuture = DummyWeatherData.getForecast();
+    _weatherFuture = _fetchRealWeather();
 
     _sheetController.addListener(() {
       setState(() {
         _sheetSize = _sheetController.size;
       });
     });
+  }
+
+  /// 🔁 Fetches GPS, Posts to Backend, and Gets Real Weather
+  Future<WeatherModel> _fetchRealWeather() async {
+    try {
+      // 1. Get device location
+      Position position = await _locationService.getCurrentLocation();
+
+      // 2. Post location to your FastAPI backend
+      bool locationUpdated = await ApiService.updateUserLocation(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (!locationUpdated) {
+        throw Exception("Failed to sync location with server.");
+      }
+
+      // 3. Fetch the weather data from the backend
+      final weatherData = await ApiService.getWeatherForecast();
+
+      if (weatherData == null || !weatherData.containsKey('forecast')) {
+        throw Exception("Failed to load weather data from server.");
+      }
+
+      // 4. Map the raw JSON list to your Dart DailyForecast models
+      List<DailyForecast> parsedForecast = (weatherData['forecast'] as List).map((item) {
+        return DailyForecast(
+          date: item['date'],
+          tempMax: (item['temp_max'] as num).toDouble(),
+          tempMin: (item['temp_min'] as num).toDouble(),
+          rainMm: (item['rain_mm'] as num).toDouble(),
+          condition: item['condition'],
+        );
+      }).toList();
+
+      // 5. Return the full WeatherModel
+      return WeatherModel(
+        location: weatherData['location'] ?? "Unknown Location",
+        forecast: parsedForecast,
+      );
+
+    } catch (e) {
+      // Pass the error up so the FutureBuilder can catch it
+      throw Exception(e.toString());
+    }
   }
 
   @override
@@ -49,16 +97,61 @@ class _WeatherScreenState extends State<WeatherScreen> {
           child: FutureBuilder<WeatherModel>(
             future: _weatherFuture,
             builder: (context, snapshot) {
+
+              // Loading State
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: AppColors.primary),
+                      SizedBox(height: 16),
+                      Text(
+                        "Locating and fetching weather...",
+                        style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
                 );
               }
 
-              if (!snapshot.hasData) {
+              // Error State
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
+                        const SizedBox(height: 16),
+                        Text(
+                          "Oops! Something went wrong.\n${snapshot.error}",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                          onPressed: () {
+                            setState(() {
+                              _weatherFuture = _fetchRealWeather();
+                            });
+                          },
+                          child: const Text("Try Again", style: TextStyle(color: Colors.white)),
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              // No Data State
+              if (!snapshot.hasData || snapshot.data!.forecast.isEmpty) {
                 return const Center(child: Text("No weather data available"));
               }
 
+              // Success State!
               final weather = snapshot.data!;
               final today = weather.forecast.first;
 
@@ -115,7 +208,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                   Image.asset(
                                     _getWeatherImage(today.condition),
                                     height: 140,
-                                    // Fallback if image not found: errorBuilder
                                     errorBuilder: (context, error, stackTrace) => const Icon(Icons.cloud, size: 140, color: Colors.grey),
                                   ),
                                   const SizedBox(height: 20),
@@ -196,8 +288,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                     controller: scrollController,
                                     itemCount: weather.forecast.length,
                                     itemBuilder: (context, index) {
-                                      // Skip today (index 0) in the list if you only want the future days,
-                                      // but leaving it in matches your original logic.
                                       return _forecastTile(weather.forecast[index]);
                                     },
                                   ),
@@ -219,7 +309,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
   }
 
   Widget _forecastTile(DailyForecast daily) {
-    // Convert "2026-02-25" to "Wed", "Thu"
     DateTime parsedDate = DateTime.parse(daily.date);
     String dayName = DateFormat('EEE').format(parsedDate);
 
@@ -286,11 +375,13 @@ class _WeatherScreenState extends State<WeatherScreen> {
       case "clouds":
         return "assets/images/weather/cloudy.png";
       case "rain":
+      case "rainy":
         return "assets/images/weather/rain.png";
       case "storm":
+      case "thunderstorm":
         return "assets/images/weather/storm.png";
       default:
-        return "assets/images/weather/default.png"; // Make sure this asset exists
+        return "assets/images/weather/default.png";
     }
   }
 }

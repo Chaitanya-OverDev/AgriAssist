@@ -8,3 +8,8 @@ pytz
 python-multipart
 alembic
 google-genai
+requests
+edge-tts
+beautifulsoup4 
+lxml
+playwright
