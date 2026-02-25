@@ -4,7 +4,7 @@ def fetch_agmarknet_prices(state_name: str, district_name: str = None):
     print(f"\n--- 1. Launching Browser for {district_name or 'ALL DISTRICTS'}, {state_name}... ---")
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False) 
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36")
         page = context.new_page()
         
