@@ -35,6 +35,12 @@ dependencies:
   flutter_tts: ^3.8.5
   speech_to_text: ^7.3.0
 
+
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+  intl: ^0.18.1
+
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
 
@@ -72,6 +78,14 @@ flutter:
   assets:
     - assets/images/farmer_character.png
     - assets/images/farmer_listening.png
+    - assets/images/weather/sunny.png
+    - assets/images/weather/cloudy.png
+    - assets/images/weather/rain.png
+    - assets/images/weather/default.png
+    - assets/images/weather/storm.png
+    - assets/images/weather/sprinkle.png
+
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
