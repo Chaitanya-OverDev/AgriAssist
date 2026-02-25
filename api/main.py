@@ -806,14 +806,13 @@ def fetch_gov_price_data(state: str, district: str, commodity: str):
     return []
 
 def get_market_data_workflow(state: str, district: str, db: Session):
-    """Called when the app starts. Scrapes and caches prices for 6 hours."""
     
-    # 1. Check DB for cached data within the last 6 HOURS
-    six_hours_ago = datetime.utcnow() - timedelta(hours=6)
+    # 1. Check DB for cached data within the last 24 HOURS
+    cache_expiry = datetime.utcnow() - timedelta(hours=24)
     
     query = db.query(CommodityCache).filter(
         CommodityCache.state == state.title(),
-        CommodityCache.scraped_at >= six_hours_ago
+        CommodityCache.scraped_at >= cache_expiry
     )
     if district:
         query = query.filter(CommodityCache.district == district.title())
@@ -822,9 +821,9 @@ def get_market_data_workflow(state: str, district: str, db: Session):
         
     cached_records = query.all()
     
-    # 2. If we have fresh data, just return it directly to the Flutter app
+    # 2. If we have fresh data, return it
     if cached_records:
-        print(f"--- Returning {len(cached_records)} cached prices (under 6 hours old) ---")
+        print(f"--- Returning {len(cached_records)} cached prices (under 24 hours old) ---")
         return [
             {
                 "commodity": r.commodity, 
@@ -836,14 +835,15 @@ def get_market_data_workflow(state: str, district: str, db: Session):
             } for r in cached_records
         ]
         
-    # 3. If cache is empty or older than 6 hours, wipe old data and scrape new
-    print(f"--- Cache expired. Scraping Agmarknet for {state}... ---")
+    # 3. If cache is empty, insert the DUMMY DATA
+    print(f"--- Cache expired. Loading DUMMY DATA for {state}... ---")
     db.query(CommodityCache).filter(CommodityCache.state == state.title()).delete()
     db.commit()
     
-    scraped_data = fetch_agmarknet_prices(state, district)
+    # 👇 CALLING THE DUMMY FUNCTION HERE
+    scraped_data = fetch_dummy_agmarknet_prices(state, district)
     
-    # 4. Save the new prices to the database
+    # 4. Save the dummy prices to the database
     for item in scraped_data:
         new_cache = CommodityCache(
             state=state.title(),
