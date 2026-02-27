@@ -738,23 +738,26 @@ async def generate_audio(request: TTSRequest, background_tasks: BackgroundTasks)
 
 # --- Helper Baazar Bhav ---
 def get_baazar_bhav(state: str, commodity: str, db: Session, district: str = None):
+    # Change from 6 hours to 24 hours
+    twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
     
-    six_hours_ago = datetime.utcnow() - timedelta(hours=6)
-    
-    # Check if we have FRESH data for this state
+    # 1. Check if we have FRESH data for this state
     state_exists = db.query(CommodityCache).filter(
         CommodityCache.state == state.title(),
-        CommodityCache.scraped_at >= six_hours_ago
+        CommodityCache.scraped_at >= twenty_four_hours_ago
     ).first()
     
+    # 2. If NO fresh data exists, trigger the workflow to scrape and save it
     if not state_exists:
-        return f"Market data for {state} is not available or is older than 6 hours. Politely ask the user to open the Market tab in their app to refresh the live data."
+        print(f"--- No fresh data for {state} in DB. Triggering scraper... ---")
+        # This will populate the DB so the next lines can find it
+        get_market_data_workflow(state, district, db)
         
-    # Search for the specific crop within the fresh data
+    # 3. Search for the specific crop within the fresh data
     crop_data = db.query(CommodityCache).filter(
         CommodityCache.state == state.title(),
         CommodityCache.commodity.ilike(f"%{commodity}%"),
-        CommodityCache.scraped_at >= six_hours_ago
+        CommodityCache.scraped_at >= twenty_four_hours_ago
     ).first()
     
     if crop_data:
@@ -773,7 +776,7 @@ INSTRUCTIONS FOR AI:
 """
     else:
         return f"Politely inform the user that market data is not available for {commodity} in {state} today."
-
+    
 # --- Baazar Bhav Tool for gemini ---
 bhav_tool = types.Tool(
     function_declarations=[
@@ -817,7 +820,6 @@ def fetch_gov_price_data(state: str, district: str, commodity: str):
     return []
 
 def get_market_data_workflow(state: str, district: str, db: Session):
-    
     # 1. Check DB for cached data within the last 24 HOURS
     cache_expiry = datetime.utcnow() - timedelta(hours=24)
     
@@ -825,14 +827,16 @@ def get_market_data_workflow(state: str, district: str, db: Session):
         CommodityCache.state == state.title(),
         CommodityCache.scraped_at >= cache_expiry
     )
+    
+    # Check for both the specific district OR "All Districts"
     if district:
-        query = query.filter(CommodityCache.district == district.title())
+        query = query.filter(CommodityCache.district.in_([district.title(), "All Districts"]))
     else:
-        query = query.filter(CommodityCache.district == None)
+        query = query.filter(CommodityCache.district == "All Districts")
         
     cached_records = query.all()
     
-    # 2. If we have fresh data, return it
+    # 2. If we have fresh data, return it immediately
     if cached_records:
         print(f"--- Returning {len(cached_records)} cached prices (under 24 hours old) ---")
         return [
@@ -846,18 +850,20 @@ def get_market_data_workflow(state: str, district: str, db: Session):
             } for r in cached_records
         ]
         
-    # 3. If cache is empty
-    print(f"--- Cache expired. Loading DUMMY DATA for {state}... ---")
+    # 3. If cache is empty or expired, scrape new data
+    print(f"--- Cache expired or empty. Scraping live data for {state}... ---")
     db.query(CommodityCache).filter(CommodityCache.state == state.title()).delete()
     db.commit()
     
-    scraped_data = fetch_dummy_agmarknet_prices(state, district)
+    # Ensure the function name matches your scraper file
+    scraped_data = fetch_agmarknet_prices(state, district) 
     
-    # 4. Save the dummy prices to the database
+    # 4. Save the new prices to the database
     for item in scraped_data:
         new_cache = CommodityCache(
             state=state.title(),
-            district=district.title() if district else None,
+            # Ensure "All Districts" is saved if district is missing
+            district=district.title() if district else "All Districts", 
             commodity=item["commodity"],
             commodity_group=item.get("commodity_group"),
             msp=item.get("msp"),
