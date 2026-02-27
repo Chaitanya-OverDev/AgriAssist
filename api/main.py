@@ -189,7 +189,7 @@ def get_user_sessions(user_id: int, db: Session = Depends(get_db)):
     return sessions
 
 # --- HELPER: SYSTEM INSTRUCTIONS ---
-def build_system_instruction(user: User, db: Session):
+def build_system_instruction(user, db, is_voice_mode: bool = False):
     today = datetime.now().strftime("%d %B %Y")
 
     # ---------------- LOCATION & WEATHER ----------------
@@ -242,6 +242,20 @@ def build_system_instruction(user: User, db: Session):
             f"{weather_context}"
         )
 
+    # ---------------- VOICE AND TEXT MODE ----------------
+    if is_voice_mode:
+        behavior_rules = """
+1. **Tone & Style:** Speak completely naturally like a human agricultural expert on a phone call. Use a friendly conversational style (Hinglish/Hindi/English). Talk like a human being, not a robot reading a manual.
+2. **Formatting & Punctuation:** STRICTLY NO MARKDOWN AND NO LISTS. Do not use colons (:), bullet points, numbered lists, asterisks (*), or hashtags (#). Use ONLY plain text with simple punctuation like periods and commas so the Text-to-Speech engine reads it smoothly.
+3. **Conciseness:** Keep answers very short and conversational (1-3 simple sentences). Wait for the farmer to ask follow-up questions.
+        """
+    else:
+        behavior_rules = """
+1. **Tone & Style:** Always ask politely, be highly respectful, and use a friendly spoken-style (Hinglish/Hindi/English).
+2. **Formatting:** You MUST use markdown formatting (like **bolding** and bullet points) to organize your response. The user is reading this in a chat interface, so it needs to look clean and structured.
+3. **Conciseness:** Keep answers relatively short (3-4 sentences) so text is easy to read.
+        """
+
     # ---------------- FINAL SYSTEM PROMPT ----------------
     return f"""
 You are **Kisan Mitra**, an expert, polite, and welcoming agricultural advisor.
@@ -255,9 +269,7 @@ SCOPE OF CAPABILITIES:
 2. **When to use Tools:** ONLY use the `get_weather_forecast` or `get_baazar_bhav` tools if the user explicitly asks for weather updates or current market prices. For everything else, answer directly without a tool.
 
 CORE BEHAVIOR:
-1. **Tone & Style:** Always ask politely, be highly respectful, and use a friendly spoken-style (Hinglish/Hindi/English).
-2. **Formatting:** Do NOT remove formatting. You must use markdown formatting (like **bolding** and bullet points) to organize your response. The user is reading this in a chat interface, so it needs to look clean and structured.
-3. **Conciseness:** Keep answers relatively short (3-4 sentences) so voice playback is fast and text is easy to read.
+{behavior_rules}
 4. **Pesticides/Fertilizers:** If the user asks about a disease or pest, provide the Chemical Name + common Brand and Dosage (per 15L pump).
 
 MARKET PRICE TOOL RULES:
@@ -290,7 +302,7 @@ You MUST map the farmer's spoken Hindi/Marathi/English word to these EXACT offic
 * Bajra / Bajri / Pearl Millet -> "Bajra(Pearl Millet/Cumbu)"
 * Jowar / Sorghum -> "Jowar(Sorghum)"
 """
-  
+
 # --- 9. Send Message & Get Response ---
 @app.post("/chat/{session_id}/message", response_model=schemas.MessageResponse)
 def chat_with_gemini(
@@ -319,7 +331,7 @@ def chat_with_gemini(
         ))
 
     user = session.user
-    system_instruction = build_system_instruction(user, db)
+    system_instruction = build_system_instruction(user, db, request.is_voice_mode)
     
     generate_config = types.GenerateContentConfig(
         system_instruction=system_instruction,
@@ -726,9 +738,8 @@ async def generate_audio(request: TTSRequest, background_tasks: BackgroundTasks)
 
 # --- Helper Baazar Bhav ---
 def get_baazar_bhav(state: str, commodity: str, db: Session, district: str = None):
-    """Gemini tool: Reads cached prices strictly within the last 6 hours."""
     
-    six_hours_ago = datetime.utcnow() - timedelta(hours=6)
+    six_hours_ago = datetime.utcnow() - timedelta(hours=24)
     
     # Check if we have FRESH data for this state
     state_exists = db.query(CommodityCache).filter(
@@ -835,13 +846,12 @@ def get_market_data_workflow(state: str, district: str, db: Session):
             } for r in cached_records
         ]
         
-    # 3. If cache is empty, insert the DUMMY DATA
+    # 3. If cache is empty
     print(f"--- Cache expired. Loading DUMMY DATA for {state}... ---")
     db.query(CommodityCache).filter(CommodityCache.state == state.title()).delete()
     db.commit()
     
-    # 👇 CALLING THE DUMMY FUNCTION HERE
-    scraped_data = fetch_dummy_agmarknet_prices(state, district)
+    scraped_data = fetch_agmarknet_prices(state, district)
     
     # 4. Save the dummy prices to the database
     for item in scraped_data:

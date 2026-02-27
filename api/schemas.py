@@ -52,6 +52,7 @@ class CreateSessionSchema(BaseModel):
 
 class MessageCreateSchema(BaseModel):
     content: str
+    is_voice_mode: Optional[bool] = False
 
 class MessageResponse(BaseModel):
     id: int

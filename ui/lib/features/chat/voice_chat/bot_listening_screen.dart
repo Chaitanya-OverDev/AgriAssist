@@ -134,7 +134,7 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
       }
 
       if (_activeSessionId != null) {
-        final response = await ApiService.sendChatMessage(_activeSessionId!, text);
+        final response = await ApiService.sendChatMessage(_activeSessionId!, text, isVoiceMode:true);
 
         // Turn off processing BEFORE the bot starts speaking
         if (mounted) setState(() => _isProcessing = false);

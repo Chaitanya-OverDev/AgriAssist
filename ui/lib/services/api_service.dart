@@ -127,8 +127,8 @@ class ApiService {
     }
   }
 
-  // --- 5. Send Message to AI (UPDATED) ---
-  static Future<Map<String, dynamic>?> sendChatMessage(int sessionId, String message) async {
+// --- 5. Send Message to AI (UPDATED) ---
+  static Future<Map<String, dynamic>?> sendChatMessage(int sessionId, String message, {bool isVoiceMode = false}) async {
     if (currentUserId == null) return null;
 
     final url = Uri.parse('$baseUrl/chat/$sessionId/message?user_id=$currentUserId');
@@ -137,12 +137,17 @@ class ApiService {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"content": message}),
+        // Add is_voice_mode to the payload
+        body: jsonEncode({
+          "content": message,
+          "is_voice_mode": isVoiceMode
+        }),
       );
 
+      // This part was missing in your pasted code
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        // ✅ Return both ID and Content
+        // Return both ID and Content
         return {
           'id': data['id'],
           'content': data['content']

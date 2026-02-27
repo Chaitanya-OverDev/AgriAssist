@@ -154,7 +154,11 @@ class _TextChatScreenState extends State<TextChatScreen> {
         else throw Exception("Failed to create chat session.");
       }
 
-      final responseMap = await ApiService.sendChatMessage(activeSessionId!, text);
+      final responseMap = await ApiService.sendChatMessage(
+        activeSessionId!, 
+        text, 
+        isVoiceMode: false 
+      );
       if (!mounted) return;
       if (responseMap != null) {
         setState(() {
