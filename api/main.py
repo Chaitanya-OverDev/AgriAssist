@@ -739,7 +739,7 @@ async def generate_audio(request: TTSRequest, background_tasks: BackgroundTasks)
 # --- Helper Baazar Bhav ---
 def get_baazar_bhav(state: str, commodity: str, db: Session, district: str = None):
     
-    six_hours_ago = datetime.utcnow() - timedelta(hours=24)
+    six_hours_ago = datetime.utcnow() - timedelta(hours=6)
     
     # Check if we have FRESH data for this state
     state_exists = db.query(CommodityCache).filter(
@@ -851,7 +851,7 @@ def get_market_data_workflow(state: str, district: str, db: Session):
     db.query(CommodityCache).filter(CommodityCache.state == state.title()).delete()
     db.commit()
     
-    scraped_data = fetch_agmarknet_prices(state, district)
+    scraped_data = fetch_dummy_agmarknet_prices(state, district)
     
     # 4. Save the dummy prices to the database
     for item in scraped_data:
