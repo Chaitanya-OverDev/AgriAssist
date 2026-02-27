@@ -5,5 +5,5 @@ Steps to run the frontend
 
 Steps for Backend
 1. Go to root folder 
-2. run the command :  uvicorn api.main:app --host 0.0.0.0 --port 8000
+2. run the command :  uvicorn api.main:app --host 0.0.0.0 --port 8000 and playwright install chromium
 3. Check on postman
