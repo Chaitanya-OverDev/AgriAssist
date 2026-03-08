@@ -59,9 +59,16 @@ class ChatMessageWidgets {
                     color: isPlaying ? Colors.red : const Color(0xFF0E3D3D),
                     tooltip: isPlaying ? 'Stop' : 'Listen',
                     onPressed: () {
-                      // Pass the raw markdown text to the service.
-                      // The service will handle cleaning it before speaking.
-                      audioService.play(text, index);
+                      // 1. ADD NULL CHECK HERE
+                      if (messageId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Audio is still loading, please wait.")),
+                        );
+                        return;
+                      }
+
+                      // 2. Safely call play with the non-null messageId
+                      audioService.play(messageId, index);
                     },
                   ),
                   const SizedBox(width: 10),

@@ -71,7 +71,9 @@ class _TextChatScreenState extends State<TextChatScreen> {
   void dispose() {
     _scrollController.dispose();
     controller.dispose();
-    _audioService.dispose();
+    _audioService.stop();
+    _audioService.removePlayingIndexListener();
+
     super.dispose();
   }
 
@@ -157,7 +159,7 @@ class _TextChatScreenState extends State<TextChatScreen> {
       final responseMap = await ApiService.sendChatMessage(
         activeSessionId!, 
         text, 
-        isVoiceMode: false 
+        isVoiceMode: true
       );
       if (!mounted) return;
       if (responseMap != null) {

@@ -5,20 +5,8 @@ import random
 import os
 from dotenv import load_dotenv
 import re
-import base64
-import io
-import wave
 import requests
-import time
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import json
-
-
-import tempfile
-import edge_tts
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
 from api.tts_service import generate_audio_bytes
 
 # Google GenAI Imports
@@ -507,16 +495,23 @@ def chat_with_gemini(
 
 # --- : FETCH SAVED AUDIO ---
 @app.get("/chat/message/{message_id}/audio")
-def get_message_audio(message_id: int, db: Session = Depends(get_db)):
-    """Retrieves the stored MP3 audio from the database."""
+async def get_message_audio(message_id: int, db: Session = Depends(get_db)):
+    """Retrieves the stored MP3. If it doesn't exist, generates it instantly."""
     message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
     
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
         
+    # If audio doesn't exist in DB (e.g., old history message), generate it NOW
     if not message.audio_data:
-        # Return 202 Accepted if text is there but audio is still generating in background
-        raise HTTPException(status_code=202, detail="Audio is still generating. Try again in a few seconds.")
+        try:
+            audio_bytes = await generate_audio_bytes(message.content)
+            message.audio_data = audio_bytes
+            db.commit()
+            print(f"Generated on-demand audio for message {message_id}")
+        except Exception as e:
+            print(f"On-demand TTS Error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate audio.")
 
     # Return the binary data as an MP3 file
     return Response(content=message.audio_data, media_type="audio/mpeg")
@@ -561,114 +556,6 @@ def delete_chat_session(
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
     return {"message": "Chat session and history deleted successfully"}
-
-
-# # ---Helper: Cleaning for text ---
-# def clean_text_for_tts(text: str) -> str:
-#     if not text: return ""
-
-#     # 1. Replace newlines with periods so the TTS pauses instead of choking
-#     text = text.replace('\n', '. ')
-
-#     # 2. Remove markdown symbols (*, #, _, ~, `)
-#     text = re.sub(r'[\*#_`~]', '', text)
-
-#     # 3. Remove links [text](url) -> text
-#     text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-
-#     # 4. Collapse multiple spaces/dots
-#     text = re.sub(r'\.+', '.', text)
-#     text = re.sub(r'\s+', ' ', text)
-
-#     return text.strip()
-
-# # --- 12. GEMINI TTS Endpoint ---
-# @app.get("/chat/message/{message_id}/tts")
-# def generate_speech(
-#         message_id: int,
-#         user_id: int,
-#         db: Session = Depends(get_db)
-# ):
-#     # Fetch Message
-#     message = db.query(ChatMessage).join(ChatSession).filter(
-#         ChatMessage.id == message_id,
-#         ChatSession.user_id == user_id
-#     ).first()
-
-#     if not message:
-#         raise HTTPException(status_code=404, detail="Message not found")
-
-#     # Clean Text
-#     clean_text = clean_text_for_tts(message.content)
-#     # print(f"DEBUG: TTS Input Text: {clean_text}") # Check your terminal
-
-#     if not clean_text or len(clean_text) < 2:
-#         raise HTTPException(status_code=400, detail="Text is empty")
-
-#     try:
-#         response = client.models.generate_content(
-#             model="gemini-2.5-flash-preview-tts",
-#             contents=clean_text,
-#             config=types.GenerateContentConfig(
-#                 response_modalities=["AUDIO"],
-#                 speech_config=types.SpeechConfig(
-#                     voice_config=types.VoiceConfig(
-#                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
-#                             voice_name="Kore"
-#                         )
-#                     )
-#                 ),
-#                 safety_settings=[
-#                     types.SafetySetting(
-#                         category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-#                         threshold=HarmBlockThreshold.BLOCK_NONE
-#                     ),
-#                     types.SafetySetting(
-#                         category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-#                         threshold=HarmBlockThreshold.BLOCK_NONE
-#                     ),
-#                     types.SafetySetting(
-#                         category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-#                         threshold=HarmBlockThreshold.BLOCK_NONE
-#                     ),
-#                     types.SafetySetting(
-#                         category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-#                         threshold=HarmBlockThreshold.BLOCK_NONE
-#                     ),
-#                 ]
-#             )
-#         )
-
-#         if not response.candidates:
-#             raise HTTPException(status_code=500, detail="No candidates returned")
-
-#         if not response.candidates[0].content:
-#             finish_reason = response.candidates[0].finish_reason
-#             print(f"DEBUG: Still Blocked! Reason: {finish_reason}")
-#             raise HTTPException(status_code=400, detail=f"TTS Blocked. Reason: {finish_reason}")
-
-#         audio_content = response.candidates[0].content.parts[0].inline_data.data
-
-#         if isinstance(audio_content, str):
-#             audio_bytes = base64.b64decode(audio_content)
-#         else:
-#             audio_bytes = audio_content
-
-#         # Convert to WAV
-#         wav_buffer = io.BytesIO()
-#         with wave.open(wav_buffer, 'wb') as wav_file:
-#             wav_file.setnchannels(1)
-#             wav_file.setsampwidth(2)
-#             wav_file.setframerate(24000)
-#             wav_file.writeframes(audio_bytes)
-
-#         final_wav_data = wav_buffer.getvalue()
-
-#         return Response(content=final_wav_data, media_type="audio/wav")
-
-#     except Exception as e:
-#         print(f"TTS Exception: {e}")
-#         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Helper to get State and district from Latitude and Longitude ---
 def get_location_details(lat: float, lon: float):
@@ -739,46 +626,6 @@ def update_user_location(
         db.rollback()
         raise HTTPException(status_code=500, detail="Database update failed")
 
-# # Edge TTS
-# # Define the request body structure
-# class TTSRequest(BaseModel):
-#     text: str
-
-# # Define the exact voice ID for Manohar
-# VOICE = "mr-IN-ManoharNeural"
-
-# def remove_file(path: str):
-#     """Cleanup function to remove the temp file after sending."""
-#     try:
-#         os.unlink(path)
-#     except Exception as e:
-#         print(f"Error removing temporary file: {e}")
-
-# # ---14. Edge TTS- Endpoint
-# @app.post("/generate-audio")
-# async def generate_audio(request: TTSRequest, background_tasks: BackgroundTasks):
-#     """
-#     Takes Marathi text and returns an MP3 audio file using Edge TTS.
-#     """
-#     # Create a temporary file to hold the MP3 data
-#     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-#     temp_file_path = temp_file.name
-#     temp_file.close()
-
-#     # Generate the audio using edge-tts
-#     communicate = edge_tts.Communicate(request.text, VOICE)
-#     await communicate.save(temp_file_path)
-
-#     # Ensure the file is deleted from the server after the response is sent
-#     background_tasks.add_task(remove_file, temp_file_path)
-
-#     # Return the audio file to the client
-#     return FileResponse(
-#         temp_file_path, 
-#         media_type="audio/mpeg", 
-#         filename="response.mp3"
-#     )
-
 # --- Baazar Bhav Tool for gemini ---
 bhav_tool = types.Tool(
     function_declarations=[
@@ -798,10 +645,6 @@ bhav_tool = types.Tool(
     ]
 )
 
-
-# =========================================================
-# MARKET APIs (Clean JSON endpoints for Flutter)
-# =========================================================
 
 # --- 15. Get Market Data for User's State ---
 @app.get("/market/my-state/{user_id}")

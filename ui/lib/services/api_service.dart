@@ -7,8 +7,8 @@ import '../core/services/auth_service.dart';
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
   // static const String baseUrl = 'https://agriassist-2-wdoc.onrender.com';
-  static const String baseUrl= 'http://10.0.2.2:8000'; // For emulator
-  // static const String baseUrl= 'http://10.243.19.128:8000'; // For local device
+  // static const String baseUrl= 'http://10.0.2.2:8000'; // For emulator
+  static const String baseUrl= 'http://10.77.166.75:8000'; // For local device
 
   static String? currentPhoneNumber;
   static int? currentUserId;
@@ -167,22 +167,22 @@ class ApiService {
     }
   }
 
-  // --- 6. Get TTS Audio ---
+  // --- 6. Get TTS Audio (Updated for On-Demand Edge TTS) ---
   static Future<Uint8List?> getTtsAudio(int messageId) async {
     await _ensureInitialized();
     if (currentUserId == null) return null;
 
-    final url =
-    Uri.parse('$baseUrl/chat/message/$messageId/tts?user_id=$currentUserId');
+    final url = Uri.parse('$baseUrl/chat/message/$messageId/audio');
 
     try {
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         return response.bodyBytes;
+      } else {
+        if (kDebugMode) print("❌ getTtsAudio failed: ${response.statusCode}");
+        return null;
       }
-      if (kDebugMode) print("❌ getTtsAudio failed: ${response.statusCode}");
-      return null;
     } catch (e) {
       if (kDebugMode) print("❌ getTtsAudio error: $e");
       return null;
