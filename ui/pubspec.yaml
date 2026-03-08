@@ -46,11 +46,9 @@ dependencies:
 
 
   cupertino_icons: ^1.0.8
-  sherpa_onnx: ^1.12.24
   audioplayers: ^6.1.0
   http: ^1.2.2
   path_provider: ^2.1.2
-  archive: ^3.6.1
 
 
 dev_dependencies:

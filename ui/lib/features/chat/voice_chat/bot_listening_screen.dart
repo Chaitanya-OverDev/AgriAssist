@@ -23,10 +23,9 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   String _statusText = "Initializing...";
   String _userTranscript = "";
 
-  // Clear state tracking
   bool _isMicActive = false;
   bool _isProcessing = false;
-  bool _isBotSpeaking = false; // Added to track when the bot is talking
+  bool _isBotSpeaking = false;
 
   String _selectedLocaleId = "mr-IN";
 
@@ -47,11 +46,10 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   }
 
   void _initAnimation() {
-    // Set up the ripple animation to loop continuously
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
-    )..repeat(); // Automatically repeat the animation
+    )..repeat();
 
     _rippleAnim = CurvedAnimation(parent: _rippleController, curve: Curves.easeOut);
   }
@@ -123,7 +121,7 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   Future<void> _sendMessageToApi(String text) async {
     if (mounted) {
       setState(() {
-        _isProcessing = true; // Bot starts thinking
+        _isProcessing = true;
         _statusText = "विचार करत आहे...";
       });
     }
@@ -134,15 +132,18 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
       }
 
       if (_activeSessionId != null) {
-        final response = await ApiService.sendChatMessage(_activeSessionId!, text, isVoiceMode:true);
+        final response = await ApiService.sendChatMessage(_activeSessionId!, text, isVoiceMode: true);
 
-        // Turn off processing BEFORE the bot starts speaking
         if (mounted) setState(() => _isProcessing = false);
 
         if (response != null) {
           final botText = response['content'];
-          _messages.add({"role": "bot", "text": botText, "id": response['id']});
-          await _speakResponse(botText);
+          final messageId = response['id']; // <-- Extract ID
+
+          _messages.add({"role": "bot", "text": botText, "id": messageId});
+
+          // <-- Pass ID instead of text
+          await _speakResponse(messageId);
         } else {
           _speakError("सर्व्हर कनेक्ट करण्यात समस्या.");
         }
@@ -153,15 +154,17 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     }
   }
 
-  Future<void> _speakResponse(String text) async {
+  // <-- Updated to accept int messageId
+  Future<void> _speakResponse(int messageId) async {
     if (mounted) {
       setState(() {
-        _isBotSpeaking = true; // Bot starts talking
+        _isBotSpeaking = true;
         _statusText = "बोलत आहे...";
       });
     }
 
-    await _ttsService.play(text, 999, languageCode: _selectedLocaleId);
+    // <-- Call the updated play method (using 999 as a placeholder index for the active voice mode)
+    await _ttsService.play(messageId, 999);
 
     final completer = Completer();
     void listener() {
@@ -175,16 +178,23 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
 
     if (mounted) {
       setState(() {
-        _isBotSpeaking = false; // Bot finishes talking
+        _isBotSpeaking = false;
       });
-      // Automatically triggers the mic and ripple animation again
       _startListening();
     }
   }
 
+  // <-- Updated to just show text and wait, since local TTS is gone
   Future<void> _speakError(String msg) async {
-    if (mounted) setState(() => _statusText = msg);
-    await _ttsService.play(msg, -1, languageCode: _selectedLocaleId);
+    if (mounted) {
+      setState(() {
+        _statusText = msg;
+        _isBotSpeaking = false;
+      });
+    }
+    // Give the user 3 seconds to read the error, then turn mic back on
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted) _startListening();
   }
 
   void _goToTextChat() {
@@ -211,18 +221,18 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
   @override
   void dispose() {
     _sttService.stop();
-    _ttsService.dispose();
+    _ttsService.stop();
+    _ttsService.removePlayingIndexListener();
+
     _rippleController.dispose();
     super.dispose();
   }
 
-  // Extracted logic for the dynamic animated mic button
   Widget _buildDynamicMicButton() {
     final bool isBusy = _isProcessing || _isBotSpeaking;
     Color micBgColor;
     Widget iconWidget;
 
-    // Determine visual state based on what the app is doing
     if (_isProcessing) {
       micBgColor = Colors.grey.shade600;
       iconWidget = const SizedBox(
@@ -241,7 +251,6 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
     }
 
     return GestureDetector(
-      // Disable tap if processing or speaking
       onTap: isBusy ? null : () => _isMicActive ? _sttService.stop() : _startListening(),
       child: AnimatedBuilder(
         animation: _rippleAnim,
@@ -249,20 +258,18 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
           return Stack(
             alignment: Alignment.center,
             children: [
-              // Show pulsing ripple ONLY when listening
               if (_isMicActive)
                 Transform.scale(
-                  scale: 1.0 + (_rippleAnim.value * 0.6), // Scale grows outwards
+                  scale: 1.0 + (_rippleAnim.value * 0.6),
                   child: Container(
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: micBgColor.withOpacity(1.0 - _rippleAnim.value), // Fades out
+                      color: micBgColor.withOpacity(1.0 - _rippleAnim.value),
                     ),
                   ),
                 ),
-              // Main Button Core
               Container(
                 width: 80,
                 height: 80,
@@ -300,7 +307,6 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
         child: SafeArea(
           child: Column(
             children: [
-              // --- APP BAR ---
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 child: Row(
@@ -349,7 +355,6 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
 
               const SizedBox(height: 50),
 
-              // --- CHARACTER AVATAR ---
               Container(
                 width: 240,
                 height: 240,
@@ -365,7 +370,6 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
 
               const SizedBox(height: 40),
 
-              // --- TRANSCRIPT AREA ---
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Align(
@@ -401,17 +405,12 @@ class _BotListeningScreenState extends State<BotListeningScreen> with SingleTick
 
               const Spacer(),
 
-              // --- ACTION BUTTONS ---
               Padding(
                 padding: const EdgeInsets.only(bottom: 60),
                 child: Row(
                   children: [
                     const Expanded(child: SizedBox()),
-
-                    // DYNAMIC MIC BUTTON INJECTED HERE
                     _buildDynamicMicButton(),
-
-                    // CLOSE BUTTON
                     Expanded(
                       child: Center(
                         child: GestureDetector(

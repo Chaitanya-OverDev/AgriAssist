@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text,Float
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text,Float,LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import datetime
@@ -60,26 +60,16 @@ class ChatMessage(Base):
     session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
     role = Column(String, nullable=False) # 'user' or 'model'
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
 
+    audio_data = Column(LargeBinary, nullable=True) 
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     session = relationship("ChatSession", back_populates="messages")
 
-class CommodityCache(Base):
-    __tablename__ = "commodity_cache"
-
-    id = Column(Integer, primary_key=True, index=True)
-    state = Column(String, index=True, nullable=False)
-    district = Column(String, index=True, nullable=True) 
-    commodity = Column(String, index=True, nullable=False)
-    commodity_group = Column(String, nullable=True)
-    
-  
-    msp = Column(String, nullable=True)
-    price_latest = Column(String, nullable=True) 
-    price_mid = Column(String, nullable=True)    
-    price_old = Column(String, nullable=True)    
-    
-    scraped_at = Column(DateTime(timezone=True), server_default=func.now())
+    @property
+    def has_audio(self) -> bool:
+        return self.audio_data is not None
 
 class WeatherCache(Base):
     __tablename__ = "weather_cache"
