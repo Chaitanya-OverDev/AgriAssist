@@ -19,6 +19,7 @@ import tempfile
 import edge_tts
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from api.tts_service import generate_audio_bytes
 
 # Google GenAI Imports
 from google import genai
@@ -27,10 +28,10 @@ from google.genai.types import HarmCategory, HarmBlockThreshold
 
 # Local Imports
 from db import models
-from db.database import engine, get_db
-from db.models import User, OTP, ChatSession, ChatMessage, get_ist_time, CommodityCache, WeatherCache
+from db.database import engine, get_db,SessionLocal
+from db.models import User, OTP, ChatSession, ChatMessage, get_ist_time, WeatherCache
 from api import schemas
-from api.scraper import fetch_agmarknet_prices
+from api.bazarbhav import get_market_data, get_baazar_bhav_for_ai
 
 # Create DB Tables
 models.Base.metadata.create_all(bind=engine)
@@ -303,12 +304,33 @@ You MUST map the farmer's spoken Hindi/Marathi/English word to these EXACT offic
 * Jowar / Sorghum -> "Jowar(Sorghum)"
 """
 
+# --- BACKGROUND TASK ---
+async def process_tts_background(message_id: int, text: str):
+    """Runs in the background to generate and save audio to the DB."""
+    # We must open a NEW database session for background tasks
+    db = SessionLocal() 
+    try:
+        # Generate the audio bytes
+        audio_bytes = await generate_audio_bytes(text)
+        
+        # Save to database
+        message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
+        if message:
+            message.audio_data = audio_bytes
+            db.commit()
+            print(f"Successfully saved audio for message {message_id}")
+    except Exception as e:
+        print(f"Background TTS Error: {e}")
+    finally:
+        db.close()
+
 # --- 9. Send Message & Get Response ---
 @app.post("/chat/{session_id}/message", response_model=schemas.MessageResponse)
 def chat_with_gemini(
         session_id: int,
         request: schemas.MessageCreateSchema,
         user_id: int,
+        background_tasks: BackgroundTasks,
         db: Session = Depends(get_db)
 ):
     # 1. Validate Session
@@ -397,7 +419,7 @@ def chat_with_gemini(
                 
                 if state and commodity:
                     # PASS THE DB SESSION HERE
-                    bhav_result = get_baazar_bhav(state=state, commodity=commodity, district=district, db=db)
+                    bhav_result = get_baazar_bhav_for_ai(state=state, commodity=commodity, district=district)
                 else:
                     bhav_result = "Cannot check prices. Please ensure GPS location is saved and you mentioned a specific crop."
 
@@ -434,6 +456,10 @@ def chat_with_gemini(
     ai_msg = ChatMessage(session_id=session.id, role="model", content=ai_text)
     db.add(ai_msg)
     db.commit()
+    db.refresh(ai_msg) 
+
+    if request.is_voice_mode: # Optional: Only generate if they are in voice mode
+        background_tasks.add_task(process_tts_background, ai_msg.id, ai_text)
 
     # --- TITLE LOGIC ---
     current_title = session.title
@@ -479,6 +505,22 @@ def chat_with_gemini(
 
     return ai_msg
 
+# --- : FETCH SAVED AUDIO ---
+@app.get("/chat/message/{message_id}/audio")
+def get_message_audio(message_id: int, db: Session = Depends(get_db)):
+    """Retrieves the stored MP3 audio from the database."""
+    message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
+    
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+        
+    if not message.audio_data:
+        # Return 202 Accepted if text is there but audio is still generating in background
+        raise HTTPException(status_code=202, detail="Audio is still generating. Try again in a few seconds.")
+
+    # Return the binary data as an MP3 file
+    return Response(content=message.audio_data, media_type="audio/mpeg")
+
 # --- 10. Get Message History ---
 @app.get("/chat/{session_id}/history", response_model=list[schemas.MessageResponse])
 def get_chat_history(session_id: int, user_id: int, db: Session = Depends(get_db)):
@@ -486,6 +528,7 @@ def get_chat_history(session_id: int, user_id: int, db: Session = Depends(get_db
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()).all()
     return messages
 
@@ -520,112 +563,112 @@ def delete_chat_session(
     return {"message": "Chat session and history deleted successfully"}
 
 
-# ---Helper: Cleaning for text ---
-def clean_text_for_tts(text: str) -> str:
-    if not text: return ""
+# # ---Helper: Cleaning for text ---
+# def clean_text_for_tts(text: str) -> str:
+#     if not text: return ""
 
-    # 1. Replace newlines with periods so the TTS pauses instead of choking
-    text = text.replace('\n', '. ')
+#     # 1. Replace newlines with periods so the TTS pauses instead of choking
+#     text = text.replace('\n', '. ')
 
-    # 2. Remove markdown symbols (*, #, _, ~, `)
-    text = re.sub(r'[\*#_`~]', '', text)
+#     # 2. Remove markdown symbols (*, #, _, ~, `)
+#     text = re.sub(r'[\*#_`~]', '', text)
 
-    # 3. Remove links [text](url) -> text
-    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+#     # 3. Remove links [text](url) -> text
+#     text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
 
-    # 4. Collapse multiple spaces/dots
-    text = re.sub(r'\.+', '.', text)
-    text = re.sub(r'\s+', ' ', text)
+#     # 4. Collapse multiple spaces/dots
+#     text = re.sub(r'\.+', '.', text)
+#     text = re.sub(r'\s+', ' ', text)
 
-    return text.strip()
+#     return text.strip()
 
-# --- 12. GEMINI TTS Endpoint ---
-@app.get("/chat/message/{message_id}/tts")
-def generate_speech(
-        message_id: int,
-        user_id: int,
-        db: Session = Depends(get_db)
-):
-    # Fetch Message
-    message = db.query(ChatMessage).join(ChatSession).filter(
-        ChatMessage.id == message_id,
-        ChatSession.user_id == user_id
-    ).first()
+# # --- 12. GEMINI TTS Endpoint ---
+# @app.get("/chat/message/{message_id}/tts")
+# def generate_speech(
+#         message_id: int,
+#         user_id: int,
+#         db: Session = Depends(get_db)
+# ):
+#     # Fetch Message
+#     message = db.query(ChatMessage).join(ChatSession).filter(
+#         ChatMessage.id == message_id,
+#         ChatSession.user_id == user_id
+#     ).first()
 
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+#     if not message:
+#         raise HTTPException(status_code=404, detail="Message not found")
 
-    # Clean Text
-    clean_text = clean_text_for_tts(message.content)
-    # print(f"DEBUG: TTS Input Text: {clean_text}") # Check your terminal
+#     # Clean Text
+#     clean_text = clean_text_for_tts(message.content)
+#     # print(f"DEBUG: TTS Input Text: {clean_text}") # Check your terminal
 
-    if not clean_text or len(clean_text) < 2:
-        raise HTTPException(status_code=400, detail="Text is empty")
+#     if not clean_text or len(clean_text) < 2:
+#         raise HTTPException(status_code=400, detail="Text is empty")
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-tts",
-            contents=clean_text,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Kore"
-                        )
-                    )
-                ),
-                safety_settings=[
-                    types.SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=HarmBlockThreshold.BLOCK_NONE
-                    ),
-                    types.SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE
-                    ),
-                    types.SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE
-                    ),
-                    types.SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE
-                    ),
-                ]
-            )
-        )
+#     try:
+#         response = client.models.generate_content(
+#             model="gemini-2.5-flash-preview-tts",
+#             contents=clean_text,
+#             config=types.GenerateContentConfig(
+#                 response_modalities=["AUDIO"],
+#                 speech_config=types.SpeechConfig(
+#                     voice_config=types.VoiceConfig(
+#                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
+#                             voice_name="Kore"
+#                         )
+#                     )
+#                 ),
+#                 safety_settings=[
+#                     types.SafetySetting(
+#                         category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+#                         threshold=HarmBlockThreshold.BLOCK_NONE
+#                     ),
+#                     types.SafetySetting(
+#                         category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+#                         threshold=HarmBlockThreshold.BLOCK_NONE
+#                     ),
+#                     types.SafetySetting(
+#                         category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+#                         threshold=HarmBlockThreshold.BLOCK_NONE
+#                     ),
+#                     types.SafetySetting(
+#                         category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+#                         threshold=HarmBlockThreshold.BLOCK_NONE
+#                     ),
+#                 ]
+#             )
+#         )
 
-        if not response.candidates:
-            raise HTTPException(status_code=500, detail="No candidates returned")
+#         if not response.candidates:
+#             raise HTTPException(status_code=500, detail="No candidates returned")
 
-        if not response.candidates[0].content:
-            finish_reason = response.candidates[0].finish_reason
-            print(f"DEBUG: Still Blocked! Reason: {finish_reason}")
-            raise HTTPException(status_code=400, detail=f"TTS Blocked. Reason: {finish_reason}")
+#         if not response.candidates[0].content:
+#             finish_reason = response.candidates[0].finish_reason
+#             print(f"DEBUG: Still Blocked! Reason: {finish_reason}")
+#             raise HTTPException(status_code=400, detail=f"TTS Blocked. Reason: {finish_reason}")
 
-        audio_content = response.candidates[0].content.parts[0].inline_data.data
+#         audio_content = response.candidates[0].content.parts[0].inline_data.data
 
-        if isinstance(audio_content, str):
-            audio_bytes = base64.b64decode(audio_content)
-        else:
-            audio_bytes = audio_content
+#         if isinstance(audio_content, str):
+#             audio_bytes = base64.b64decode(audio_content)
+#         else:
+#             audio_bytes = audio_content
 
-        # Convert to WAV
-        wav_buffer = io.BytesIO()
-        with wave.open(wav_buffer, 'wb') as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(24000)
-            wav_file.writeframes(audio_bytes)
+#         # Convert to WAV
+#         wav_buffer = io.BytesIO()
+#         with wave.open(wav_buffer, 'wb') as wav_file:
+#             wav_file.setnchannels(1)
+#             wav_file.setsampwidth(2)
+#             wav_file.setframerate(24000)
+#             wav_file.writeframes(audio_bytes)
 
-        final_wav_data = wav_buffer.getvalue()
+#         final_wav_data = wav_buffer.getvalue()
 
-        return Response(content=final_wav_data, media_type="audio/wav")
+#         return Response(content=final_wav_data, media_type="audio/wav")
 
-    except Exception as e:
-        print(f"TTS Exception: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+#     except Exception as e:
+#         print(f"TTS Exception: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Helper to get State and district from Latitude and Longitude ---
 def get_location_details(lat: float, lon: float):
@@ -696,219 +739,103 @@ def update_user_location(
         db.rollback()
         raise HTTPException(status_code=500, detail="Database update failed")
 
-# Edge TTS
-# Define the request body structure
-class TTSRequest(BaseModel):
-    text: str
+# # Edge TTS
+# # Define the request body structure
+# class TTSRequest(BaseModel):
+#     text: str
 
-# Define the exact voice ID for Manohar
-VOICE = "mr-IN-ManoharNeural"
+# # Define the exact voice ID for Manohar
+# VOICE = "mr-IN-ManoharNeural"
 
-def remove_file(path: str):
-    """Cleanup function to remove the temp file after sending."""
-    try:
-        os.unlink(path)
-    except Exception as e:
-        print(f"Error removing temporary file: {e}")
+# def remove_file(path: str):
+#     """Cleanup function to remove the temp file after sending."""
+#     try:
+#         os.unlink(path)
+#     except Exception as e:
+#         print(f"Error removing temporary file: {e}")
 
-# ---14. Edge TTS- Endpoint
-@app.post("/generate-audio")
-async def generate_audio(request: TTSRequest, background_tasks: BackgroundTasks):
-    """
-    Takes Marathi text and returns an MP3 audio file using Edge TTS.
-    """
-    # Create a temporary file to hold the MP3 data
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    temp_file_path = temp_file.name
-    temp_file.close()
+# # ---14. Edge TTS- Endpoint
+# @app.post("/generate-audio")
+# async def generate_audio(request: TTSRequest, background_tasks: BackgroundTasks):
+#     """
+#     Takes Marathi text and returns an MP3 audio file using Edge TTS.
+#     """
+#     # Create a temporary file to hold the MP3 data
+#     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+#     temp_file_path = temp_file.name
+#     temp_file.close()
 
-    # Generate the audio using edge-tts
-    communicate = edge_tts.Communicate(request.text, VOICE)
-    await communicate.save(temp_file_path)
+#     # Generate the audio using edge-tts
+#     communicate = edge_tts.Communicate(request.text, VOICE)
+#     await communicate.save(temp_file_path)
 
-    # Ensure the file is deleted from the server after the response is sent
-    background_tasks.add_task(remove_file, temp_file_path)
+#     # Ensure the file is deleted from the server after the response is sent
+#     background_tasks.add_task(remove_file, temp_file_path)
 
-    # Return the audio file to the client
-    return FileResponse(
-        temp_file_path, 
-        media_type="audio/mpeg", 
-        filename="response.mp3"
-    )
+#     # Return the audio file to the client
+#     return FileResponse(
+#         temp_file_path, 
+#         media_type="audio/mpeg", 
+#         filename="response.mp3"
+#     )
 
-# --- Helper Baazar Bhav ---
-def get_baazar_bhav(state: str, commodity: str, db: Session, district: str = None):
-    # Change from 6 hours to 24 hours
-    twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
-    
-    # 1. Check if we have FRESH data for this state
-    state_exists = db.query(CommodityCache).filter(
-        CommodityCache.state == state.title(),
-        CommodityCache.scraped_at >= twenty_four_hours_ago
-    ).first()
-    
-    # 2. If NO fresh data exists, trigger the workflow to scrape and save it
-    if not state_exists:
-        print(f"--- No fresh data for {state} in DB. Triggering scraper... ---")
-        # This will populate the DB so the next lines can find it
-        get_market_data_workflow(state, district, db)
-        
-    # 3. Search for the specific crop within the fresh data
-    crop_data = db.query(CommodityCache).filter(
-        CommodityCache.state == state.title(),
-        CommodityCache.commodity.ilike(f"%{commodity}%"),
-        CommodityCache.scraped_at >= twenty_four_hours_ago
-    ).first()
-    
-    if crop_data:
-        return f"""
-DATA FOUND FOR {commodity.upper()} IN {state.upper()}:
-- MSP: ₹{crop_data.msp}
-- Latest Price: ₹{crop_data.price_latest}
-- Mid Price: ₹{crop_data.price_mid}
-- Old Price: ₹{crop_data.price_old}
-
-INSTRUCTIONS FOR AI:
-1. Politely tell the farmer the Latest Price and the MSP.
-2. Compare the Latest Price to the Mid/Old prices to tell them if the market trend is going UP, DOWN, or is STABLE.
-3. Use bold formatting (**) for key numbers so it looks good in the chat UI.
-4. Keep the explanation concise (2-3 sentences max).
-"""
-    else:
-        return f"Politely inform the user that market data is not available for {commodity} in {state} today."
-    
 # --- Baazar Bhav Tool for gemini ---
 bhav_tool = types.Tool(
     function_declarations=[
         types.FunctionDeclaration(
-            name="get_baazar_bhav",
-            description="Get the current agricultural market price (Baazar Bhav/Mandi rates) for a specific crop/commodity from the local database.",
+            name="get_baazar_bhav_for_ai", 
+            description="Get the current agricultural market price (Baazar Bhav/Mandi rates) for a specific crop/commodity.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
                     "state": types.Schema(type=types.Type.STRING, description="The Indian state"),
-                    "district": types.Schema(type=types.Type.STRING, description="The Indian district (optional)"),
+                    "district": types.Schema(type=types.Type.STRING, description="The Indian district"),
                     "commodity": types.Schema(type=types.Type.STRING, description="The name of the crop or commodity (e.g., Cotton, Wheat, Onion)"),
                 },
-                required=["state", "commodity"] # District is no longer strictly required
+                required=["state", "district", "commodity"]
             )
         )
     ]
 )
 
-def fetch_gov_price_data(state: str, district: str, commodity: str):
-    """Fetches raw JSON price data from data.gov.in for database storage."""
-    api_key = os.getenv("DATA_GOV_API_KEY")
-    resource_id = "9ef84268-d588-465a-a308-a864a43d0070"
-    url = f"https://api.data.gov.in/resource/{resource_id}"
-    
-    params = {
-        "api-key": api_key,
-        "format": "json",
-        "limit": 5,
-        "filters[state]": state.title(),
-        "filters[district]": district.title(),
-        "filters[commodity]": commodity.title()
-    }
-    
-    try:
-        response = requests.get(url, params=params, timeout=15)
-        if response.status_code == 200:
-            return response.json().get("records", [])
-    except Exception as e:
-        print(f"Gov API Error: {e}")
-    return []
 
-def get_market_data_workflow(state: str, district: str, db: Session):
-    # 1. Check DB for cached data within the last 24 HOURS
-    cache_expiry = datetime.utcnow() - timedelta(hours=24)
-    
-    query = db.query(CommodityCache).filter(
-        CommodityCache.state == state.title(),
-        CommodityCache.scraped_at >= cache_expiry
-    )
-    
-    # Check for both the specific district OR "All Districts"
-    if district:
-        query = query.filter(CommodityCache.district.in_([district.title(), "All Districts"]))
-    else:
-        query = query.filter(CommodityCache.district == "All Districts")
-        
-    cached_records = query.all()
-    
-    # 2. If we have fresh data, return it immediately
-    if cached_records:
-        print(f"--- Returning {len(cached_records)} cached prices (under 24 hours old) ---")
-        return [
-            {
-                "commodity": r.commodity, 
-                "commodity_group": r.commodity_group,
-                "msp": r.msp,
-                "price_latest": r.price_latest,
-                "price_mid": r.price_mid,
-                "price_old": r.price_old
-            } for r in cached_records
-        ]
-        
-    # 3. If cache is empty or expired, scrape new data
-    print(f"--- Cache expired or empty. Scraping live data for {state}... ---")
-    db.query(CommodityCache).filter(CommodityCache.state == state.title()).delete()
-    db.commit()
-    
-    # Ensure the function name matches your scraper file
-    scraped_data = fetch_agmarknet_prices(state, district) 
-    
-    # 4. Save the new prices to the database
-    for item in scraped_data:
-        new_cache = CommodityCache(
-            state=state.title(),
-            # Ensure "All Districts" is saved if district is missing
-            district=district.title() if district else "All Districts", 
-            commodity=item["commodity"],
-            commodity_group=item.get("commodity_group"),
-            msp=item.get("msp"),
-            price_latest=item.get("price_latest"),
-            price_mid=item.get("price_mid"),
-            price_old=item.get("price_old")
-        )
-        db.add(new_cache)
-    db.commit()
+# =========================================================
+# MARKET APIs (Clean JSON endpoints for Flutter)
+# =========================================================
 
-    return scraped_data
-
-# --- 15. Get User's District Bhavs ---
-@app.get("/market/my-district/{user_id}")
-def get_user_district_bhavs(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.state or not user.district:
-        raise HTTPException(status_code=400, detail="User location incomplete.")
-        
-    results = get_market_data_workflow(user.state, user.district, db)
-    return {"location": f"{user.district}, {user.state}", "data": results}
-
-# --- 16. Get User's State Bhavs (All Districts) ---
+# --- 15. Get Market Data for User's State ---
 @app.get("/market/my-state/{user_id}")
-def get_user_state_bhavs(user_id: int, db: Session = Depends(get_db)):
+async def get_user_state_bhavs(user_id: int, db: Session = Depends(get_db)):
+
     user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.state:
-        raise HTTPException(status_code=400, detail="User state incomplete.")
-        
-    results = get_market_data_workflow(user.state, None, db) 
-    return {"location": user.state, "data": results}
 
-# --- 17. Search purely by State ---
-@app.get("/market/search/state")
-def search_state_bhavs(state: str, db: Session = Depends(get_db)):
-    results = get_market_data_workflow(state, None, db)
-    return {"location": state, "data": results}
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-# --- 18. Search by State AND District ---
-@app.get("/market/search/district")
-def search_district_bhavs(state: str, district: str, db: Session = Depends(get_db)):
-    results = get_market_data_workflow(state, district, db)
-    return {"location": f"{district}, {state}", "data": results}
+    if not user.state:
+        raise HTTPException(status_code=400, detail="User state not set")
 
-   
+    data = await get_market_data(user.state, None)
+
+    return {
+        "state": user.state,
+        "district": user.district,
+        "data": data
+    }
+
+
+# --- 16. Search Market Data by State or District ---
+@app.get("/market/search")
+async def search_market(state: str, district: str | None = None):
+
+    data = await get_market_data(state, district)
+
+    return {
+        "state": state,
+        "district": district,
+        "data": data
+    }
+
 # ---Helper Weather Tool ---
 weather_tool = types.Tool(
     function_declarations=[

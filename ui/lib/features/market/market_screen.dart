@@ -1,7 +1,8 @@
+
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:agriassist/services/api_service.dart';
+import '../../data/india_locations.dart';
 
 class MarketScreen extends StatefulWidget {
   const MarketScreen({Key? key}) : super(key: key);
@@ -11,226 +12,349 @@ class MarketScreen extends StatefulWidget {
 }
 
 class _MarketScreenState extends State<MarketScreen> {
-  late Future<Map<String, dynamic>?> _marketFuture;
 
-  // Dynamic Dates Calculation
-  final String _latestDate = DateFormat('dd MMM').format(DateTime.now().subtract(const Duration(days: 2)));
-  final String _midDate = DateFormat('dd MMM').format(DateTime.now().subtract(const Duration(days: 3)));
-  final String _oldDate = DateFormat('dd MMM').format(DateTime.now().subtract(const Duration(days: 4)));
+  late Future<List<dynamic>> _marketFuture;
+
+  String? selectedState;
+  String? selectedDistrict;
+
+  List<String> states = indiaStatesDistricts.keys.toList();
+  List<String> districts = [];
 
   @override
   void initState() {
     super.initState();
-    // Will load instantly if cached, otherwise fetches from network
-    _marketFuture = ApiService.getMarketData();
+    _marketFuture = _loadMarketData();
+  }
+
+  /// LOAD DEFAULT MARKET DATA
+  Future<List<dynamic>> _loadMarketData() async {
+
+    final data = await ApiService.getMarketData();
+
+    print("API RESPONSE: $data");
+
+    if (data == null) return [];
+
+    return (data["data"]?["data"] ?? []) as List<dynamic>;
+  }
+
+  /// FILTER MARKET DATA
+  Future<List<dynamic>> _filterMarketData() async {
+
+    if (selectedState != null && selectedDistrict != null) {
+
+      final data = await ApiService.searchMarketByDistrict(
+        selectedState!,
+        selectedDistrict!,
+      );
+
+      if (data == null) return [];
+
+      print("Market API Response: $data");
+
+      return (data["data"]?["data"] ?? []) as List<dynamic>;
+    }
+
+    if (selectedState != null) {
+
+      final data = await ApiService.searchMarketByState(
+        selectedState!,
+      );
+
+      if (data == null) return [];
+
+      return (data["data"]?["data"] ?? []) as List<dynamic>;
+    }
+
+    final data = await ApiService.getMarketData();
+
+    if (data == null) return [];
+
+    return (data["data"]?["data"] ?? []) as List<dynamic>;
+  }
+
+  void applyFilter() {
+    setState(() {
+      _marketFuture = _filterMarketData();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       backgroundColor: const Color(0xFFEAF8F1),
+
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF13383A)),
-          onPressed: () => Navigator.pop(context),
-        ),
         title: const Text(
           "Bazaar Bhav",
           style: TextStyle(
             color: Color(0xFF13383A),
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
-      body: FutureBuilder<Map<String, dynamic>?>(
-        future: _marketFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-          }
 
-          if (snapshot.hasError || !snapshot.hasData || snapshot.data!['data'] == null) {
-            return _buildErrorState();
-          }
+      body: Column(
+        children: [
 
-          final location = snapshot.data!['location'] ?? "Unknown Location";
-          final List commodities = snapshot.data!['data'];
+          /// FILTER SECTION
+          _buildFilterSection(),
 
-          if (commodities.isEmpty) {
-            return const Center(child: Text("No market data available for your state right now."));
-          }
+          Expanded(
+            child: FutureBuilder<List<dynamic>>(
+              future: _marketFuture,
+              builder: (context, snapshot) {
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(
+                    child: Text("No market data found"),
+                  );
+                }
+
+                final data = snapshot.data!;
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: data.length,
+                  itemBuilder: (context, index) {
+                    return _buildMarketCard(data[index]);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// FILTER UI
+  Widget _buildFilterSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+
+          Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Text(
-                  "Market Prices in $location",
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                  ),
+
+              /// STATE DROPDOWN
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  hint: const Text("Select State"),
+                  value: selectedState,
+                  isExpanded: true,
+                  items: states.map((s) {
+                    return DropdownMenuItem(
+                      value: s,
+                      child: Text(s),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      selectedState = val;
+
+                      districts = indiaStatesDistricts[val] ?? [];
+
+                      selectedDistrict = null;
+                    });
+                  },
                 ),
               ),
+
+              const SizedBox(width: 12),
+
+              /// DISTRICT DROPDOWN
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  itemCount: commodities.length,
-                  itemBuilder: (context, index) {
-                    return _buildCommodityCard(commodities[index]);
+                child: DropdownButtonFormField<String>(
+                  hint: const Text("Select District"),
+                  value: selectedDistrict,
+                  isExpanded: true,
+                  items: districts.map((d) {
+                    return DropdownMenuItem(
+                      value: d,
+                      child: Text(d),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      selectedDistrict = val;
+                    });
                   },
                 ),
               ),
             ],
-          );
-        },
+          ),
+
+          const SizedBox(height: 10),
+
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              minimumSize: const Size(double.infinity, 45),
+            ),
+            onPressed: applyFilter,
+            child: const Text("Apply Filter"),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildCommodityCard(Map<String, dynamic> item) {
-    String name = item['commodity'] ?? "Unknown";
-    String msp = item['msp'] ?? "—";
-    String latest = item['price_latest'] ?? "—";
-    String mid = item['price_mid'] ?? "—";
-    String old = item['price_old'] ?? "—";
+  /// MARKET CARD
+  Widget _buildMarketCard(Map<String, dynamic> item) {
+
+    String commodity = item["commodity"] ?? "";
+    String market = item["market"] ?? "";
+    String district = item["district"] ?? "";
+    String price = item["price_latest"]?.toString() ?? "0";
+    String msp = item["msp"]?.toString() ?? "0";
+    String date = item["date"] ?? "";
+    String source = item["source"] ?? "";
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
+
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          )
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Left Side: Text and Prices
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF13383A),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "MSP: ₹$msp",
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green,
-                  ),
-                ),
-                const Divider(height: 20),
-                _priceRow("Latest ($_latestDate):", latest, isBold: true),
-                const SizedBox(height: 4),
-                _priceRow("Mid ($_midDate):", mid),
-                const SizedBox(height: 4),
-                _priceRow("Old ($_oldDate):", old),
-              ],
-            ),
-          ),
 
-          const SizedBox(width: 16),
-
-          // Right Side: Image
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5FBF9),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFB5CAC1).withOpacity(0.5)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Image.asset(
-                _getCommodityImage(name),
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.grass, size: 40, color: Colors.grey),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _priceRow(String label, String price, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: isBold ? Colors.black87 : Colors.black54,
-            fontWeight: isBold ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-        Text(
-          price == "—" ? "—" : "₹$price",
-          style: TextStyle(
-            fontSize: 14,
-            color: isBold ? const Color(0xFF13383A) : Colors.black87,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Map commodity names to asset paths
-  String _getCommodityImage(String name) {
-    String n = name.toLowerCase();
-    if (n.contains('cotton') || n.contains('kapas')) return "assets/images/crops/cotton.png";
-    if (n.contains('wheat')) return "assets/images/crops/wheat.png";
-    if (n.contains('soyabean')) return "assets/images/crops/soyabean.png";
-    if (n.contains('onion')) return "assets/images/crops/onion.png";
-    if (n.contains('bajra')) return "assets/images/crops/bajra.png";
-    if (n.contains('jowar')) return "assets/images/crops/jowar.png";
-    if (n.contains('maize')) return "assets/images/crops/maize.png";
-    if (n.contains('paddy')) return "assets/images/crops/paddy.png";
-    // Default fallback
-    return "assets/images/crops/default.png";
-  }
-
-  Widget _buildErrorState() {
-    return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
-          const SizedBox(height: 16),
-          const Text("Could not load market data."),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _marketFuture = ApiService.getMarketData(forceRefresh: true);
-              });
-            },
-            child: const Text("Retry"),
+
+          Row(
+            children: [
+
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: const Color(0xFFEAF8F1),
+                child: Image.asset(
+                  _getCommodityImage(commodity),
+                  width: 28,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    Text(
+                      commodity,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+
+                    Text(
+                      "$market • $district",
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  source.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+
+              _priceBox("Market Price", price),
+
+              _priceBox("MSP", msp),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          Text(
+            "Updated on $date",
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
           )
         ],
       ),
     );
+  }
+
+  Widget _priceBox(String label, String price) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.grey,
+          ),
+        ),
+
+        Text(
+          "₹ $price",
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF13383A),
+          ),
+        )
+      ],
+    );
+  }
+
+  String _getCommodityImage(String name) {
+    String n = name.toLowerCase();
+
+    if (n.contains('cotton')) return "assets/images/crops/cotton.png";
+    if (n.contains('onion')) return "assets/images/crops/onion.png";
+    if (n.contains('soyabean')) return "assets/images/crops/soyabean.png";
+    if (n.contains('wheat')) return "assets/images/crops/wheat.png";
+
+    return "assets/images/crops/default.png";
   }
 }

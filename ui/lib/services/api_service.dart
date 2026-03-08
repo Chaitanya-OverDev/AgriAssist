@@ -8,10 +8,8 @@ class ApiService {
   // ⭐ PRODUCTION URL (Render)
   // static const String baseUrl = 'https://agriassist-2-wdoc.onrender.com';
   // static const String baseUrl= 'http://10.0.2.2:8000'; // For emulator
-     static const String baseUrl= 'http://10.243.19.128:8000'; // For local device
+  static const String baseUrl= 'http://10.243.19.128:8000'; // For local device
 
-
-  // Store data temporarily
   static String? currentPhoneNumber;
   static int? currentUserId;
 
@@ -29,11 +27,17 @@ class ApiService {
     }
   }
 
+  /// Ensures that currentUserId is loaded before any API call that needs it.
+  static Future<void> _ensureInitialized() async {
+    if (currentUserId == null) {
+      await initializeFromStorage();
+    }
+  }
+
   // --- 1. Send OTP ---
   static Future<bool> sendOtp(String phone) async {
     final url = Uri.parse('$baseUrl/auth/send-otp');
     try {
-      if (kDebugMode) print("Sending OTP to: $phone");
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -44,10 +48,10 @@ class ApiService {
         currentPhoneNumber = phone;
         return true;
       }
-      if (kDebugMode) print("Error Send OTP: ${response.body}");
+      if (kDebugMode) print("❌ sendOtp failed: ${response.statusCode}");
       return false;
     } catch (e) {
-      if (kDebugMode) print("Exception Send OTP: $e");
+      if (kDebugMode) print("❌ sendOtp error: $e");
       return false;
     }
   }
@@ -55,7 +59,9 @@ class ApiService {
   // --- 2. Verify OTP ---
   static Future<bool> verifyOtp(String otp) async {
     if (currentPhoneNumber == null) return false;
+
     final url = Uri.parse('$baseUrl/auth/verify-otp');
+
     try {
       final response = await http.post(
         url,
@@ -69,41 +75,41 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         currentUserId = data['user_id'];
-        if (kDebugMode) print("User Verified. ID: $currentUserId");
         return true;
       }
-      if (kDebugMode) print("Error Verify OTP: ${response.body}");
+      if (kDebugMode) print("❌ verifyOtp failed: ${response.statusCode}");
       return false;
     } catch (e) {
-      if (kDebugMode) print("Exception Verify OTP: $e");
+      if (kDebugMode) print("❌ verifyOtp error: $e");
       return false;
     }
   }
 
   // --- 3. Update User Profile ---
   static Future<bool> updateUserProfile(Map<String, String> data) async {
+    await _ensureInitialized();
     if (currentUserId == null) return false;
+
     final url = Uri.parse('$baseUrl/users/update/$currentUserId');
+
     try {
       final response = await http.put(url, body: data);
+
       if (response.statusCode == 200) {
-        if (kDebugMode) print("Profile Updated: $data");
         return true;
       }
-      if (kDebugMode) print("Error Update Profile: ${response.body}");
+      if (kDebugMode) print("❌ updateUserProfile failed: ${response.statusCode}");
       return false;
     } catch (e) {
-      if (kDebugMode) print("Exception Update Profile: $e");
+      if (kDebugMode) print("❌ updateUserProfile error: $e");
       return false;
     }
   }
 
   // --- 4. Create Chat Session ---
   static Future<int?> createSession(String title) async {
-    if (currentUserId == null) {
-      if (kDebugMode) print("Error: User ID is null. Log in first.");
-      return null;
-    }
+    await _ensureInitialized();
+    if (currentUserId == null) return null;
 
     final url = Uri.parse('$baseUrl/chat/sessions?user_id=$currentUserId');
 
@@ -117,81 +123,76 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['id'];
-      } else {
-        if (kDebugMode) print("Error Create Session: ${response.body}");
-        return null;
       }
+      if (kDebugMode) print("❌ createSession failed: ${response.statusCode}");
+      return null;
     } catch (e) {
-      if (kDebugMode) print("Exception Create Session: $e");
+      if (kDebugMode) print("❌ createSession error: $e");
       return null;
     }
   }
 
-// --- 5. Send Message to AI (UPDATED) ---
-  static Future<Map<String, dynamic>?> sendChatMessage(int sessionId, String message, {bool isVoiceMode = false}) async {
+  // --- 5. Send Chat Message ---
+  static Future<Map<String, dynamic>?> sendChatMessage(
+      int sessionId, String message,
+      {bool isVoiceMode = false}) async {
+    await _ensureInitialized();
     if (currentUserId == null) return null;
 
-    final url = Uri.parse('$baseUrl/chat/$sessionId/message?user_id=$currentUserId');
+    final url =
+    Uri.parse('$baseUrl/chat/$sessionId/message?user_id=$currentUserId');
 
     try {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-        // Add is_voice_mode to the payload
         body: jsonEncode({
           "content": message,
           "is_voice_mode": isVoiceMode
         }),
       );
 
-      // This part was missing in your pasted code
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        // Return both ID and Content
         return {
           'id': data['id'],
           'content': data['content']
         };
-      } else {
-        if (kDebugMode) print("Error Send Message: ${response.body}");
-        return null;
       }
+      if (kDebugMode) print("❌ sendChatMessage failed: ${response.statusCode}");
+      return null;
     } catch (e) {
-      if (kDebugMode) print("Exception Send Message: $e");
+      if (kDebugMode) print("❌ sendChatMessage error: $e");
       return null;
     }
   }
 
-  // --- 6. Get TTS Audio from Backend ---
+  // --- 6. Get TTS Audio ---
   static Future<Uint8List?> getTtsAudio(int messageId) async {
+    await _ensureInitialized();
     if (currentUserId == null) return null;
 
-    // Call your FastAPI endpoint
-    final url = Uri.parse('$baseUrl/chat/message/$messageId/tts?user_id=$currentUserId');
+    final url =
+    Uri.parse('$baseUrl/chat/message/$messageId/tts?user_id=$currentUserId');
 
     try {
-      if (kDebugMode) print("🔊 Requesting TTS for Message ID: $messageId");
-
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         return response.bodyBytes;
-      } else {
-        if (kDebugMode) print("❌ TTS Error: ${response.statusCode} - ${response.body}");
-        return null;
       }
+      if (kDebugMode) print("❌ getTtsAudio failed: ${response.statusCode}");
+      return null;
     } catch (e) {
-      if (kDebugMode) print("❌ TTS Exception: $e");
+      if (kDebugMode) print("❌ getTtsAudio error: $e");
       return null;
     }
   }
 
   // --- 7. Get User Sessions ---
   static Future<List<dynamic>?> getUserSessions() async {
-    if (currentUserId == null) {
-      if (kDebugMode) print("Error: User ID is null. Log in first.");
-      return null;
-    }
+    await _ensureInitialized();
+    if (currentUserId == null) return null;
 
     final url = Uri.parse('$baseUrl/chat/sessions/$currentUserId');
 
@@ -200,156 +201,234 @@ class ApiService {
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
-      } else {
-        if (kDebugMode) print("Error Fetching Sessions: ${response.body}");
-        return null;
       }
+      if (kDebugMode) print("❌ getUserSessions failed: ${response.statusCode}");
+      return null;
     } catch (e) {
-      if (kDebugMode) print("Exception Fetching Sessions: $e");
+      if (kDebugMode) print("❌ getUserSessions error: $e");
       return null;
     }
   }
 
   // --- 8. Delete Chat Session ---
   static Future<bool> deleteChatSession(int sessionId) async {
+    await _ensureInitialized();
     if (currentUserId == null) return false;
 
-    // Notice we pass user_id as a query parameter as defined in your FastAPI endpoint
-    final url = Uri.parse('$baseUrl/chat/sessions/$sessionId?user_id=$currentUserId');
+    final url =
+    Uri.parse('$baseUrl/chat/sessions/$sessionId?user_id=$currentUserId');
 
     try {
       final response = await http.delete(url);
 
-      if (response.statusCode == 200) {
-        if (kDebugMode) print("Session $sessionId deleted successfully.");
-        return true;
-      } else {
-        if (kDebugMode) print("Error Deleting Session: ${response.body}");
-        return false;
-      }
+      if (response.statusCode == 200) return true;
+      if (kDebugMode) print("❌ deleteChatSession failed: ${response.statusCode}");
+      return false;
     } catch (e) {
-      if (kDebugMode) print("Exception Deleting Session: $e");
+      if (kDebugMode) print("❌ deleteChatSession error: $e");
       return false;
     }
   }
 
-  // --- 9. Get Message History ---
-  static Future<List<Map<String, dynamic>>?> getChatHistory(int sessionId) async {
+  // --- 9. Get Chat History ---
+  static Future<List<Map<String, dynamic>>?> getChatHistory(
+      int sessionId) async {
+    await _ensureInitialized();
     if (currentUserId == null) return null;
 
-    final url = Uri.parse('$baseUrl/chat/$sessionId/history?user_id=$currentUserId');
+    final url =
+    Uri.parse('$baseUrl/chat/$sessionId/history?user_id=$currentUserId');
 
     try {
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         List<dynamic> data = jsonDecode(response.body);
-
-        // Map the backend schema to the format TextChatScreen expects
         return data.map((msg) {
           return {
             "id": msg["id"],
-            // Ensure the role matches what your UI expects ("user" or "bot")
-            // If your backend uses "assistant", map it to "bot"
             "role": msg["role"] == "user" ? "user" : "bot",
-            "text": msg["content"], // UI expects "text", backend sends "content"
+            "text": msg["content"],
           };
         }).toList();
-      } else {
-        if (kDebugMode) print("Error Fetching History: ${response.body}");
-        return null;
       }
+      if (kDebugMode) print("❌ getChatHistory failed: ${response.statusCode}");
+      return null;
     } catch (e) {
-      if (kDebugMode) print("Exception Fetching History: $e");
+      if (kDebugMode) print("❌ getChatHistory error: $e");
       return null;
     }
   }
 
-    // --- 10. Update User Location ---
-    static Future<bool> updateUserLocation(double lat, double lon) async {
-      if (currentUserId == null) return false;
-      final url = Uri.parse('$baseUrl/users/$currentUserId/location');
-      try {
-        final response = await http.post(
-          url,
-          headers: {"Content-Type": "application/json"},
-          body: jsonEncode({"latitude": lat, "longitude": lon}),
-        );
-        return response.statusCode == 200;
-      } catch (e) {
-        return false;
-      }
+  // --- 10. Update User Location ---
+  static Future<bool> updateUserLocation(double lat, double lon) async {
+    await _ensureInitialized();
+    if (currentUserId == null) return false;
+
+    final url = Uri.parse('$baseUrl/users/$currentUserId/location');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "latitude": lat,
+          "longitude": lon
+        }),
+      );
+
+      if (response.statusCode == 200) return true;
+      if (kDebugMode) print("❌ updateUserLocation failed: ${response.statusCode}");
+      return false;
+    } catch (e) {
+      if (kDebugMode) print("❌ updateUserLocation error: $e");
+      return false;
+    }
+  }
+
+  // --- 11. Get Weather Forecast ---
+  static Future<Map<String, dynamic>?> getWeatherForecast(
+      {bool forceRefresh = false}) async {
+    await _ensureInitialized();
+    if (currentUserId == null) return null;
+
+    if (!forceRefresh && _cachedWeather != null) {
+      return _cachedWeather;
     }
 
-    // --- 11. Get Weather Forecast (WITH CACHING) ---
-    static Future<Map<String, dynamic>?> getWeatherForecast({bool forceRefresh = false}) async {
-      if (currentUserId == null) return null;
+    final url = Uri.parse('$baseUrl/weather/my-forecast/$currentUserId');
 
-      // Return cached data immediately if it exists and we aren't forcing a refresh
-      if (!forceRefresh && _cachedWeather != null) {
-        if (kDebugMode) print("☁️ Returning CACHED Weather Data");
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        _cachedWeather = jsonDecode(response.body);
         return _cachedWeather;
       }
+      if (kDebugMode) print("❌ getWeatherForecast failed: ${response.statusCode}");
+      return null;
+    } catch (e) {
+      if (kDebugMode) print("❌ getWeatherForecast error: $e");
+      return null;
+    }
+  }
 
-      final url = Uri.parse('$baseUrl/weather/my-forecast/$currentUserId');
-      try {
-        final response = await http.get(url);
-        if (response.statusCode == 200) {
-          _cachedWeather = jsonDecode(response.body); // Save to cache
-          return _cachedWeather;
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
+  // --- 12. Get State Market Data ---
+  static Future<Map<String, dynamic>?> getMarketData(
+      {bool forceRefresh = false}) async {
+    await _ensureInitialized();
+    if (currentUserId == null) return null;
+
+    if (!forceRefresh && _cachedMarketData != null) {
+      return _cachedMarketData;
     }
 
-    // --- 12. Get Market Data (WITH CACHING) ---
-    static Future<Map<String, dynamic>?> getMarketData({bool forceRefresh = false}) async {
-      if (currentUserId == null) return null;
+    final url = Uri.parse('$baseUrl/market/my-state/$currentUserId');
 
-      // Return cached data immediately if it exists
-      if (!forceRefresh && _cachedMarketData != null) {
-        if (kDebugMode) print("💰 Returning CACHED Market Data");
-        return _cachedMarketData;
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        _cachedMarketData = decoded;
+        if (kDebugMode) {
+          print("Market API Response: $decoded");
+        }
+        return decoded;
+      }
+      if (kDebugMode) print("❌ getMarketData failed: ${response.statusCode}");
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print("❌ Market API Error: $e");
+      }
+      return null;
+    }
+  }
+
+  // --- 13. Get District Bhavs ---
+  static Future<Map<String, dynamic>?> getMyDistrictBhavs() async {
+    await _ensureInitialized();
+    if (currentUserId == null) return null;
+
+    final url = Uri.parse('$baseUrl/market/my-district/$currentUserId');
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      if (kDebugMode) print("❌ getMyDistrictBhavs failed: ${response.statusCode}");
+      return null;
+    } catch (e) {
+      if (kDebugMode) print("❌ getMyDistrictBhavs error: $e");
+      return null;
+    }
+  }
+
+  // --- 14. Search by State and District ---
+  static Future<Map<String, dynamic>?> searchMarketByDistrict(
+      String state, String district) async {
+
+    final url = Uri.parse(
+        '$baseUrl/market/search?state=$state&district=$district');
+
+    try {
+      if (kDebugMode) {
+        print("MARKET SEARCH URL: $url");
       }
 
-      // Using the State endpoint as requested
-      final url = Uri.parse('$baseUrl/market/my-state/$currentUserId');
-      try {
-        final response = await http.get(url);
-        if (response.statusCode == 200) {
-          _cachedMarketData = jsonDecode(response.body); // Save to cache
-          return _cachedMarketData;
-        }
-        return null;
-      } catch (e) {
-        return null;
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
       }
+
+      if (kDebugMode) {
+        print("❌ searchMarketByDistrict failed: ${response.statusCode}");
+        print("Response body: ${response.body}");
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print("❌ searchMarketByDistrict error: $e");
+      }
+      return null;
     }
+  }
 
-    // --- 13. Preload Data on App Start ---
-    static Future<void> preloadDashboardData(double lat, double lon) async {
-      if (currentUserId == null) return;
+  // --- 15. Search by State Only (no user ID needed) ---
+  static Future<Map<String, dynamic>?> searchMarketByState(
+      String state) async {
+    final url = Uri.parse('$baseUrl/market/search/state?state=$state');
 
-      if (kDebugMode) print("🚀 Starting silent preload sequence...");
+    try {
+      final response = await http.get(url);
 
-      // 1. Send location to backend
-      updateUserLocation(lat, lon).then((success) async {
-        if (success) {
-          if (kDebugMode) print("⏳ Location saved. Waiting 12 seconds before fetching market data...");
-
-          // 2. Wait 12 seconds
-          await Future.delayed(const Duration(seconds: 12));
-
-          if (kDebugMode) print("📥 Fetching Weather and Market data now...");
-
-          // 3. Fetch and cache the data
-          getWeatherForecast(forceRefresh: true);
-          getMarketData(forceRefresh: true);
-        } else {
-          if (kDebugMode) print("❌ Failed to update location, aborting preload.");
-        }
-      });
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      if (kDebugMode) print("❌ searchMarketByState failed: ${response.statusCode}");
+      return null;
+    } catch (e) {
+      if (kDebugMode) print("❌ searchMarketByState error: $e");
+      return null;
     }
+  }
+
+  // --- 16. Preload Dashboard Data ---
+  static Future<void> preloadDashboardData(double lat, double lon) async {
+    await _ensureInitialized();
+    if (currentUserId == null) return;
+
+    updateUserLocation(lat, lon).then((success) async {
+      if (success) {
+        await Future.delayed(const Duration(seconds: 12));
+        getWeatherForecast(forceRefresh: true);
+        getMarketData(forceRefresh: true);
+      }
+    });
+  }
 }
