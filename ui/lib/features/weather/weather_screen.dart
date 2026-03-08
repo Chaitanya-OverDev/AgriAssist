@@ -23,11 +23,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
     _weatherFuture = _fetchRealWeather();
   }
 
-  /// 🔁 Fetches GPS, Posts to Backend, and Gets Real Weather
+  /// 🔁 Logic remains identical to ensure backend compatibility
   Future<WeatherModel> _fetchRealWeather() async {
     try {
       Position position = await _locationService.getCurrentLocation();
-
       bool locationUpdated = await ApiService.updateUserLocation(
         position.latitude,
         position.longitude,
@@ -38,7 +37,6 @@ class _WeatherScreenState extends State<WeatherScreen> {
       }
 
       final weatherData = await ApiService.getWeatherForecast();
-
       if (weatherData == null || !weatherData.containsKey('forecast')) {
         throw Exception("Failed to load weather data from server.");
       }
@@ -57,338 +55,298 @@ class _WeatherScreenState extends State<WeatherScreen> {
         location: weatherData['location'] ?? "Unknown Location",
         forecast: parsedForecast,
       );
-
     } catch (e) {
       throw Exception(e.toString());
     }
   }
 
-  /// Helper to get static farmer advice based on the weather condition
   Map<String, String> _getFarmerAdvice(String condition) {
     String cond = condition.toLowerCase();
     if (cond.contains('sun') || cond.contains('clear')) {
       return {
-        'good': 'Ideal for harvesting, sun-drying crops, and tilling.',
-        'bad': 'High evaporation. Ensure crops are well-irrigated.'
+        'good': 'Ideal for harvesting and sun-drying.',
+        'bad': 'High evaporation. Check irrigation.'
       };
     } else if (cond.contains('cloud')) {
       return {
-        'good': 'Perfect weather for spraying fertilizers and pesticides.',
-        'bad': 'Not ideal for solar-drying harvested crops.'
+        'good': 'Perfect for spraying fertilizers.',
+        'bad': 'Not ideal for solar-drying crops.'
       };
     } else if (cond.contains('rain')) {
       return {
-        'good': 'Natural irrigation! Great time for transplanting saplings.',
-        'bad': 'Do not spray chemicals. Avoid harvesting to prevent rot.'
+        'good': 'Natural irrigation! Great for transplanting.',
+        'bad': 'Avoid harvesting to prevent rot.'
       };
     } else if (cond.contains('storm') || cond.contains('thunder')) {
       return {
-        'good': 'Indoor planning and maintaining farming equipment.',
-        'bad': 'Risk of crop damage. Secure livestock and stay safe.'
-      };
-    } else {
-      return {
-        'good': 'Favorable for general field inspections.',
-        'bad': 'Keep an eye out for sudden weather shifts.'
+        'good': 'Indoor planning and equipment maintenance.',
+        'bad': 'Secure livestock and stay safe.'
       };
     }
+    return {
+      'good': 'Favorable for field inspections.',
+      'bad': 'Watch for sudden weather shifts.'
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAF8F1), // Gentle farm green background
-      body: SafeArea(
-        child: FutureBuilder<WeatherModel>(
-          future: _weatherFuture,
-          builder: (context, snapshot) {
+      backgroundColor: const Color(0xFFF4F7F5), // Ultra clean light grey/green
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.chevron_left, color: Colors.black87, size: 30),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "AgriWeather",
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, letterSpacing: 1),
+        ),
+        centerTitle: true,
+      ),
+      body: FutureBuilder<WeatherModel>(
+        future: _weatherFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Colors.green));
+          }
 
-            // Loading State
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: AppColors.primary),
-                    SizedBox(height: 16),
-                    Text(
-                      "Locating and fetching weather...",
-                      style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              );
-            }
+          if (snapshot.hasError) {
+            return _buildErrorState(snapshot.error.toString());
+          }
 
-            // Error State
-            if (snapshot.hasError) {
-              return Center(
+          if (!snapshot.hasData || snapshot.data!.forecast.isEmpty) {
+            return const Center(child: Text("No weather data available"));
+          }
+
+          final weather = snapshot.data!;
+          final today = weather.forecast.first;
+
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              /// Top Summary Section
+              SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Oops! Something went wrong.\n${snapshot.error}",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                        onPressed: () {
-                          setState(() {
-                            _weatherFuture = _fetchRealWeather();
-                          });
-                        },
-                        child: const Text("Try Again", style: TextStyle(color: Colors.white)),
-                      )
-                    ],
-                  ),
+                  child: _buildMainWeatherCard(weather.location, today),
                 ),
-              );
-            }
+              ),
 
-            // No Data State
-            if (!snapshot.hasData || snapshot.data!.forecast.isEmpty) {
-              return const Center(child: Text("No weather data available"));
-            }
-
-            // Success State
-            final weather = snapshot.data!;
-            final today = weather.forecast.first;
-
-            return Column(
-              children: [
-                /// Top Bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: AppColors.primary),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      const Expanded(
-                        child: Text(
-                          "Farm Weather Report",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 48), // Balancing spacer
-                    ],
-                  ),
-                ),
-
-                /// Today's Big Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: Column(
-                    children: [
-                      Text(
-                        weather.location,
-                        style: const TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset(
-                            _getWeatherImage(today.condition),
-                            height: 80,
-                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.cloud, size: 80, color: Colors.grey),
-                          ),
-                          const SizedBox(width: 20),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "${today.tempMax.toInt()}°C",
-                                style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                              ),
-                              Text(
-                                "Expect ${today.condition}",
-                                style: const TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          )
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                /// Forecast List Label
-                const Padding(
+              /// Forecast Header
+              const SliverToBoxAdapter(
+                child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "5-Day Forecast & Advice",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                    ),
+                  child: Text(
+                    "Weekly Forecast",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                 ),
+              ),
 
-                /// Scrollable Cards List
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: weather.forecast.length,
-                    itemBuilder: (context, index) {
+              /// Forecast List
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                        (context, index) {
                       return _forecastTile(weather.forecast[index], index == 0);
                     },
+                    childCount: weather.forecast.length,
                   ),
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  /// Individual Day Card
+  Widget _buildMainWeatherCard(String location, DailyForecast today) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      width: double.infinity, // Ensures card takes full width
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2E7D32), Color(0xFF81C784)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+      ),
+      child: Row( // Using a Row to split the card into two sides
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          /// Left Side: Text Details
+          Expanded( // ⬅️ THIS IS THE FIX: It prevents text from pushing the icon off screen
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, // Constrains the height
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Expanded( // Prevents long city names from overflowing
+                      child: Text(
+                        location,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "${today.tempMax.toInt()}°C",
+                  style: const TextStyle(
+                    fontSize: 52, // Slightly reduced to ensure fit on smaller devices
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  today.condition,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Colors.white70,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          /// Right Side: Weather Icon
+          Padding(
+            padding: const EdgeInsets.only(left: 10),
+            child: Image.asset(
+              _getWeatherImage(today.condition),
+              height: 80, // Reduced from 100 to provide more breathing room
+              width: 80,
+              fit: BoxFit.contain,
+              errorBuilder: (c, e, s) => const Icon(Icons.wb_sunny, size: 70, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _forecastTile(DailyForecast daily, bool isToday) {
     DateTime parsedDate = DateTime.parse(daily.date);
-    String dayName = isToday ? "Today" : DateFormat('EEEE, MMM d').format(parsedDate);
-
-    // Get the dynamic farmer advice string
+    String dayName = isToday ? "Today" : DateFormat('EEE, d MMM').format(parsedDate);
     Map<String, String> advice = _getFarmerAdvice(daily.condition);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            /// Top Row: Date, Icon, High/Low Temps
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: ExpansionTile(
+        shape: const RoundedRectangleBorder(side: BorderSide.none),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        leading: Image.asset(
+          _getWeatherImage(daily.condition),
+          height: 40,
+          errorBuilder: (c, e, s) => const Icon(Icons.cloud_queue, color: Colors.grey),
+        ),
+        title: Text(
+          dayName,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        subtitle: Text("${daily.tempMax.toInt()}° / ${daily.tempMin.toInt()}°"),
+        trailing: const Icon(Icons.expand_more, color: Colors.grey),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
               children: [
-                Text(
-                  dayName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                Row(
-                  children: [
-                    Image.asset(
-                      _getWeatherImage(daily.condition),
-                      height: 36,
-                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.cloud, size: 30, color: Colors.grey),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          "High: ${daily.tempMax.toInt()}°C",
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.orange),
-                        ),
-                        Text(
-                          "Low: ${daily.tempMin.toInt()}°C",
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.blue),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                const Divider(),
+                const SizedBox(height: 8),
+                _adviceRow(Icons.check_circle_outline, "Action", advice['good']!, Colors.green),
+                const SizedBox(height: 12),
+                _adviceRow(Icons.warning_amber_rounded, "Caution", advice['bad']!, Colors.orange),
               ],
             ),
+          )
+        ],
+      ),
+    );
+  }
 
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: Divider(color: Color(0xFFEEEEEE)),
+  Widget _adviceRow(IconData icon, String label, String text, Color color) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+              children: [
+                TextSpan(text: "$label: ", style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+                TextSpan(text: text),
+              ],
             ),
-
-            /// Bottom Row: Farmer Advice
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6FBF8),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2F0E9)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "Good: ${advice['good']}",
-                          style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.cancel, color: Colors.redAccent, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "Bad: ${advice['bad']}",
-                          style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cloud_off, size: 80, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text("Sync Error", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => setState(() => _weatherFuture = _fetchRealWeather()),
+            child: const Text("Retry Connection", style: TextStyle(color: Colors.white)),
+          )
+        ],
       ),
     );
   }
 
   String _getWeatherImage(String condition) {
     switch (condition.toLowerCase()) {
-      case "sunny":
-      case "clear":
-        return "assets/images/weather/sunny.png";
-      case "cloudy":
-      case "clouds":
-        return "assets/images/weather/cloudy.png";
-      case "rain":
-      case "rainy":
-        return "assets/images/weather/rain.png";
-      case "storm":
-      case "thunderstorm":
-        return "assets/images/weather/storm.png";
-      default:
-        return "assets/images/weather/default.png"; // Fallback image
+      case "sunny": case "clear": return "assets/images/weather/sunny.png";
+      case "cloudy": case "clouds": return "assets/images/weather/cloudy.png";
+      case "rain": case "rainy": return "assets/images/weather/rain.png";
+      case "storm": case "thunderstorm": return "assets/images/weather/storm.png";
+      default: return "assets/images/weather/default.png";
     }
   }
 }
