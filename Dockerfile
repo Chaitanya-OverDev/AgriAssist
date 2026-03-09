@@ -10,16 +10,11 @@ COPY requirements.txt .
 # Install your Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright's Chromium browser AND all required OS-level dependencies
-RUN playwright install chromium
-RUN playwright install-deps chromium
-
 # Copy the rest of your application code into the container
 COPY . .
 
-# Expose the default port Render looks for (mostly for local Docker documentation)
+# Expose the default port Render looks for
 EXPOSE 10000
 
-# Start the FastAPI server dynamically using the PORT env variable
-# (Note: Using the shell form of CMD so environment variables are evaluated)
-CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-10000}
+# Run database migrations, THEN start the FastAPI server
+CMD sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-10000}"

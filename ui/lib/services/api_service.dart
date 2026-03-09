@@ -6,9 +6,9 @@ import '../core/services/auth_service.dart';
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
-  // static const String baseUrl = 'https://agriassist-2-wdoc.onrender.com';
+  static const String baseUrl = 'https://agriassistback.onrender.com';
   // static const String baseUrl= 'http://10.0.2.2:8000'; // For emulator
-  static const String baseUrl= 'http://10.243.19.128:8000'; // For local device
+  // static const String baseUrl= 'http://10.243.19.128:8000'; // For local device
 
   static String? currentPhoneNumber;
   static int? currentUserId;
