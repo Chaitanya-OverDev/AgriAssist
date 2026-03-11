@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Form, Response,BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Form, Response,BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from datetime import timedelta,date,datetime
 import random
@@ -835,3 +835,26 @@ def get_user_weather_page(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to fetch weather data.")
         
     return {"location": f"{user.district}, {user.state}", "forecast": weather_data}
+
+# --- 20. Get Government Schemes ---
+@app.get("/api/schemes/cleaned")
+def get_cleaned_schemes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """
+    Endpoint for Flutter UI to fetch the cleaned, farmer-specific schemes.
+    """
+    schemes = db.query(models.CleanedScheme).offset(skip).limit(limit).all()
+    return {"status": "success", "count": len(schemes), "data": schemes}
+
+# --- 21. Get Government schmes by ID ---
+@app.get("/api/schemes/sync")
+def sync_new_schemes(last_id: int = Query(0, description="The highest scheme ID the frontend currently has"), db: Session = Depends(get_db)):
+    """
+    Returns only schemes that are newer than the provided last_id.
+    """
+    new_schemes = db.query(models.CleanedScheme).filter(models.CleanedScheme.id > last_id).order_by(models.CleanedScheme.id.asc()).all()
+    
+    return {
+        "status": "success",
+        "count": len(new_schemes),
+        "data": new_schemes
+    }

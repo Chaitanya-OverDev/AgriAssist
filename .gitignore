@@ -25,5 +25,5 @@ Thumbs.db
 
 # --- Logs ---
 *.log
-
+sync_log.txt
 sql_app.db
