@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
 import 'package:agriassist/features/market/market_screen.dart';
+import 'package:agriassist/features/schemes/gov_schemes_screen.dart';
 import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
 import '../../core/widgets/app_sidebar.dart';
@@ -35,6 +36,9 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
       // 2. Trigger the sequence in ApiService
       ApiService.preloadDashboardData(position.latitude, position.longitude);
+
+      // 3. Get Government Schemes if any new available
+      ApiService.syncGovSchemes();
     } catch (e) {
       if (kDebugMode) print("Location access denied or failed: $e");
     }
@@ -117,8 +121,8 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                       const SizedBox(width: 12),
                       _optionCard(
                           context,
-                          '🐄 Livestock Care',
-                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextChatScreen(prefilledQuery: '🐄 Livestock Care')))
+                          '🏛️ Gov Schemes',
+                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GovSchemesScreen()))
                       ),
                     ],
                   ),

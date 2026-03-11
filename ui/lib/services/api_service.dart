@@ -1,8 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:csv/csv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../core/services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
@@ -12,6 +16,7 @@ class ApiService {
 
   static String? currentPhoneNumber;
   static int? currentUserId;
+  static List<dynamic> localSchemes = [];
 
   static Map<String, dynamic>? _cachedWeather;
   static Map<String, dynamic>? _cachedMarketData;
@@ -430,5 +435,92 @@ class ApiService {
         getMarketData(forceRefresh: true);
       }
     });
+  }
+
+  // --- 17. Sync Government Schemes ---
+  static Future<void> syncGovSchemes() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Check local storage
+    String? storedSchemes = prefs.getString('saved_schemes');
+    List<dynamic> tempSchemes = storedSchemes != null ? jsonDecode(storedSchemes) : [];
+
+    // 🟢 FORCE LOAD FROM CSV if cache is empty OR null
+    if (storedSchemes == null || tempSchemes.isEmpty) {
+      if (kDebugMode) print("App cache is empty! Force-loading from offline CSV...");
+      await _loadSchemesFromOfflineCSV(prefs);
+    } else {
+      // 🟡 Cache exists and has data
+      localSchemes = tempSchemes;
+      if (kDebugMode) print("Loaded ${localSchemes.length} schemes from local cache.");
+    }
+
+    // 2. Find the highest ID we currently have (to ask for Delta Sync)
+    int lastId = 0;
+    if (localSchemes.isNotEmpty) {
+      lastId = localSchemes.map<int>((s) => s['id'] as int).reduce((a, b) => a > b ? a : b);
+    }
+
+    // 3. Ask backend for anything NEWER than lastId
+    final url = Uri.parse('$baseUrl/api/schemes/sync?last_id=$lastId');
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        List<dynamic> newSchemes = decoded['data'];
+
+        if (newSchemes.isNotEmpty) {
+          localSchemes.addAll(newSchemes);
+          await prefs.setString('saved_schemes', jsonEncode(localSchemes));
+          if (kDebugMode) print("✅ Synced ${newSchemes.length} new schemes from Server!");
+        } else {
+          if (kDebugMode) print("✅ Schemes are up to date.");
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print("❌ syncGovSchemes network error (Backend might be off): $e");
+    }
+  }
+
+  // --- Helper Function: Parse Offline CSV ---
+  static Future<void> _loadSchemesFromOfflineCSV(SharedPreferences prefs) async {
+    try {
+      final csvString = await rootBundle.loadString('assets/data/cleaned_schemes.csv');
+
+      // 🔥 FIX: Removed eol: '\n' so it automatically handles Windows \r\n formats
+      List<List<dynamic>> csvTable = const CsvToListConverter(
+        shouldParseNumbers: true,
+      ).convert(csvString);
+
+      List<Map<String, dynamic>> parsedSchemes = [];
+
+      for (int i = 1; i < csvTable.length; i++) {
+        var row = csvTable[i];
+
+        if (row.length >= 9) {
+          parsedSchemes.add({
+            'id': row[0] is int ? row[0] : int.tryParse(row[0].toString()) ?? 0,
+            'slug': row[1].toString(),
+            'scheme_name': row[2].toString(),
+            'description': row[3].toString(),
+            'states': row[4].toString(),
+            'level': row[5].toString(),
+            'scheme_for': row[6].toString(),
+            'close_date': row[7].toString(),
+            'tags': row[8].toString(),
+          });
+        }
+      }
+
+      localSchemes = parsedSchemes;
+      await prefs.setString('saved_schemes', jsonEncode(localSchemes));
+
+      if (kDebugMode) print("✅ Successfully parsed & saved ${parsedSchemes.length} schemes from CSV!");
+
+    } catch (e) {
+      if (kDebugMode) print("❌ Failed to parse offline CSV: $e");
+    }
   }
 }

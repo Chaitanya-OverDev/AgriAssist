@@ -30,10 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.4
   flutter_markdown: ^0.6.15
   flutter_tts: ^3.8.5
   speech_to_text: ^7.3.0
+  csv: ^6.0.0
 
 
   geolocator: ^10.1.0
@@ -82,6 +83,7 @@ flutter:
     - assets/images/weather/default.png
     - assets/images/weather/storm.png
     - assets/images/weather/sprinkle.png
+    - assets/data/cleaned_schemes.csv
 
 
   # To add assets to your application, add an assets section, like this:
