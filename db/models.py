@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text,Float,LargeBinary
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, LargeBinary, JSON
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 import datetime
 import pytz
 from db.database import Base
@@ -27,8 +26,8 @@ class User(Base):
     longitude = Column(Float, nullable=True) 
 
     is_verified = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=get_ist_time)
+    updated_at = Column(DateTime(timezone=True), onupdate=get_ist_time)
 
     # Relationships
     chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
@@ -47,8 +46,9 @@ class ChatSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    title = Column(String, default="New Chat") # E.g., "Cotton Disease Info"
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    title = Column(String, default="New Chat") 
+
+    created_at = Column(DateTime(timezone=True), default=get_ist_time)
 
     user = relationship("User", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
@@ -58,13 +58,13 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
-    role = Column(String, nullable=False) # 'user' or 'model'
+    role = Column(String, nullable=False) 
     content = Column(Text, nullable=False)
     
-
     audio_data = Column(LargeBinary, nullable=True) 
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Using our custom IST function
+    created_at = Column(DateTime(timezone=True), default=get_ist_time)
     session = relationship("ChatSession", back_populates="messages")
 
     @property
@@ -77,4 +77,41 @@ class WeatherCache(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     forecast_data = Column(Text, nullable=False) 
-    fetched_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Using our custom IST function
+    fetched_at = Column(DateTime(timezone=True), default=get_ist_time)
+
+
+class RawScheme(Base):
+    __tablename__ = "raw_schemes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String, unique=True, index=True, nullable=False) 
+    scheme_name = Column(String, nullable=False)
+    short_title = Column(String)
+    level = Column(String)
+    scheme_for = Column(String)
+    states = Column(JSON) 
+    categories = Column(JSON)
+    close_date = Column(String, nullable=True)
+    priority = Column(Integer)
+    description = Column(String)
+    tags = Column(JSON)
+    created_at = Column(DateTime(timezone=True), default=get_ist_time)
+
+class CleanedScheme(Base):
+    __tablename__ = "cleaned_schemes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    scheme_name = Column(String, nullable=False)
+    description = Column(String)
+    
+    states = Column(JSON)          
+    level = Column(String)         
+    scheme_for = Column(String)    
+    close_date = Column(String, nullable=True) 
+    
+    tags = Column(JSON)
+    
+    created_at = Column(DateTime(timezone=True), default=get_ist_time)

@@ -49,3 +49,5 @@ app.*.map.json
 /android/app/release
 
 sql_app.db
+
+sync_log.txt
