@@ -72,7 +72,7 @@ class _MarketScreenState extends State<MarketScreen>
   void applyFilter() {
     setState(() {
       _marketFuture = _filterMarketData();
-      _showFilter = false;
+      _showFilter = false; // Automatically hide filter on apply
     });
   }
 
@@ -86,19 +86,22 @@ class _MarketScreenState extends State<MarketScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           "Bazaar Bhav",
           style: TextStyle(
             color: Color(0xFF0B3B2F),
             fontWeight: FontWeight.w700,
-            fontSize: 26,
+            fontSize: 24,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_alt, color: Color(0xFF0B3B2F)),
+            icon: Icon(
+              _showFilter ? Icons.filter_alt_off : Icons.filter_alt,
+              color: const Color(0xFF0B3B2F),
+            ),
             onPressed: () {
               setState(() {
                 _showFilter = !_showFilter;
@@ -115,7 +118,7 @@ class _MarketScreenState extends State<MarketScreen>
         children: [
           AnimatedCrossFade(
             firstChild: _buildFilterSection(),
-            secondChild: const SizedBox(),
+            secondChild: _buildCollapsedFilterSummary(),
             crossFadeState: _showFilter
                 ? CrossFadeState.showFirst
                 : CrossFadeState.showSecond,
@@ -139,7 +142,7 @@ class _MarketScreenState extends State<MarketScreen>
                   final data = snapshot.data!;
 
                   return ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     itemCount: data.length,
                     itemBuilder: (context, index) {
                       return _buildMarketCard(data[index]);
@@ -154,13 +157,48 @@ class _MarketScreenState extends State<MarketScreen>
     );
   }
 
+  // A small bar that shows when filter is hidden so the user knows what's selected
+  Widget _buildCollapsedFilterSummary() {
+    if (selectedState == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Icon(Icons.location_on, size: 14, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Text(
+            "${selectedState}${selectedDistrict != null ? ' > $selectedDistrict' : ''}",
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => setState(() => _showFilter = true),
+            child: Text(
+              "Change",
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
   Widget _buildFilterSection() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-        const BorderRadius.vertical(bottom: Radius.circular(30)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -176,18 +214,11 @@ class _MarketScreenState extends State<MarketScreen>
             children: [
               const Text(
                 "Filter Markets",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               IconButton(
                 icon: const Icon(Icons.keyboard_arrow_up),
-                onPressed: () {
-                  setState(() {
-                    _showFilter = false;
-                  });
-                },
+                onPressed: () => setState(() => _showFilter = false),
               )
             ],
           ),
@@ -228,9 +259,7 @@ class _MarketScreenState extends State<MarketScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               ),
               onPressed: applyFilter,
               child: const Text(
@@ -256,103 +285,138 @@ class _MarketScreenState extends State<MarketScreen>
         color: const Color(0xFFF0F7F4),
       ),
       child: DropdownButtonFormField<String>(
-        hint: Text(hint),
+        hint: Text(hint, style: const TextStyle(fontSize: 14)),
         value: value,
         isExpanded: true,
-        icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.primary),
+        icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.primary, size: 20),
         decoration: const InputDecoration(
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         ),
-        items: items.map((s) {
-          return DropdownMenuItem(
-            value: s,
-            child: Text(s),
-          );
-        }).toList(),
+        items: items.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 14)))).toList(),
         onChanged: onChanged,
       ),
     );
   }
 
   Widget _buildMarketCard(Map<String, dynamic> item) {
-    String commodity = item["commodity"] ?? "";
+    String commodity = item["commodity"] ?? "Crop";
     String market = item["market"] ?? "";
     String district = item["district"] ?? "";
     String price = item["price_latest"]?.toString() ?? "0";
     String msp = item["msp"]?.toString() ?? "0";
     String date = item["date"] ?? "";
-    String source = item["source"] ?? "";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            commodity,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
-              color: Color(0xFF13383A),
+          // --- CROP PHOTO SECTION ---
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F7F4),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: Image.asset(
+                _getCommodityImage(commodity),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    Icon(Icons.agriculture, color: AppColors.primary, size: 30),
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text("$market • $district"),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _priceBox("Market Price", price, Icons.trending_up,
-                  const Color(0xFF1B5E3F)),
-              const SizedBox(width: 20),
-              _priceBox("MSP", msp, Icons.security,
-                  const Color(0xFFB76E2E)),
-            ],
+          const SizedBox(width: 16),
+          // --- INFO SECTION ---
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  commodity,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Color(0xFF13383A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.location_on, size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        "$market, $district",
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _priceBox("Market", price, const Color(0xFF1B5E3F)),
+                    const SizedBox(width: 24),
+                    _priceBox("MSP", msp, const Color(0xFFB76E2E)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Updated $date",
+                  style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                )
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            "Updated $date",
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          )
         ],
       ),
     );
   }
 
-  Widget _priceBox(
-      String label, String price, IconData icon, Color color) {
-    return Row(
+  Widget _priceBox(String label, String price, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(color: Colors.grey[600])),
-            Text(
-              "₹ $price",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: color,
-              ),
-            ),
-          ],
+        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+        Text(
+          "₹$price",
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            color: color,
+          ),
         ),
       ],
     );
+  }
+
+  String _getCommodityImage(String name) {
+    String n = name.toLowerCase();
+    if (n.contains('wheat')) return "assets/images/crops/wheat.png";
+    if (n.contains('cotton')) return "assets/images/crops/cotton.png";
+    if (n.contains('onion')) return "assets/images/crops/onion.png";
+    if (n.contains('rice') || n.contains('paddy')) return "assets/images/crops/rice.png";
+    if (n.contains('soyabean')) return "assets/images/crops/soyabean.png";
+    if (n.contains('tomato')) return "assets/images/crops/tomato.png";
+    return "assets/images/crops/default.png";
   }
 
   Widget _buildShimmerLoading() {
@@ -360,8 +424,19 @@ class _MarketScreenState extends State<MarketScreen>
   }
 
   Widget _buildEmptyState() {
-    return const Center(
-      child: Text("Please select the district"),
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search_off, size: 60, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          const Text(
+            "Please select your location\nto see market prices",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 }

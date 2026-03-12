@@ -508,7 +508,7 @@ class ApiService {
             'states': row[4].toString(),
             'level': row[5].toString(),
             'scheme_for': row[6].toString(),
-            'close_date': row[7].toString(),
+            'close_date': row[7] == null ? '' : row[7].toString(),
             'tags': row[8].toString(),
           });
         }
