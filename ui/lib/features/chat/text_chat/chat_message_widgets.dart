@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:agriassist/core/services/chat_audio_service.dart';
-
+import 'package:agriassist/l10n/app_localizations.dart';
 
 class ChatMessageWidgets {
+
   static Widget botBubble({
     required BuildContext context,
     required String text,
@@ -12,7 +13,9 @@ class ChatMessageWidgets {
     required ChatAudioService audioService,
     required Function(String) onCopyPressed,
   }) {
-    // Check if this specific message is playing
+
+    final t = AppLocalizations.of(context)!;
+
     final isPlaying = audioService.playingMessageIndex == index;
 
     return Align(
@@ -23,6 +26,7 @@ class ChatMessageWidgets {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -50,6 +54,8 @@ class ChatMessageWidgets {
               padding: const EdgeInsets.only(top: 6, left: 4),
               child: Row(
                 children: [
+
+                  /// AUDIO BUTTON
                   _actionButton(
                     child: Icon(
                       isPlaying ? Icons.stop : Icons.volume_up,
@@ -57,25 +63,31 @@ class ChatMessageWidgets {
                       color: isPlaying ? Colors.red : const Color(0xFF0E3D3D),
                     ),
                     color: isPlaying ? Colors.red : const Color(0xFF0E3D3D),
-                    tooltip: isPlaying ? 'Stop' : 'Listen',
+                    tooltip: isPlaying ? t.stop : t.listen,
                     onPressed: () {
-                      // 1. ADD NULL CHECK HERE
+
                       if (messageId == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Audio is still loading, please wait.")),
+                          SnackBar(content: Text(t.audioLoading)),
                         );
                         return;
                       }
 
-                      // 2. Safely call play with the non-null messageId
                       audioService.play(messageId, index);
                     },
                   ),
+
                   const SizedBox(width: 10),
+
+                  /// COPY BUTTON
                   _actionButton(
-                    child: const Icon(Icons.content_copy, size: 18, color: Color(0xFF0E3D3D)),
+                    child: const Icon(
+                      Icons.content_copy,
+                      size: 18,
+                      color: Color(0xFF0E3D3D),
+                    ),
                     color: const Color(0xFF0E3D3D),
-                    tooltip: 'Copy',
+                    tooltip: t.copy,
                     onPressed: () => onCopyPressed(text),
                   ),
                 ],
@@ -102,7 +114,10 @@ class ChatMessageWidgets {
             bottomLeft: Radius.circular(16),
           ),
         ),
-        child: Text(text, style: const TextStyle(color: Colors.white)),
+        child: Text(
+          text,
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
@@ -116,6 +131,7 @@ class ChatMessageWidgets {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -133,8 +149,12 @@ class ChatMessageWidgets {
                   ),
                 ],
               ),
-              child: Text(text, style: const TextStyle(color: Colors.grey)),
+              child: Text(
+                text,
+                style: const TextStyle(color: Colors.grey),
+              ),
             ),
+
           ],
         ),
       ),
@@ -157,7 +177,9 @@ class ChatMessageWidgets {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withOpacity(0.3)),
+            border: Border.all(
+              color: color.withOpacity(0.3),
+            ),
           ),
           child: Center(child: child),
         ),

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../features/chat/text_chat/text_chat_screen.dart';
+import '../../l10n/app_localizations.dart';
 
 class AppSidebar extends StatefulWidget {
   const AppSidebar({super.key});
@@ -13,7 +14,7 @@ class AppSidebar extends StatefulWidget {
 class _AppSidebarState extends State<AppSidebar> {
   List<dynamic> recentChats = [];
   bool isLoading = true;
-  bool isNavigating = false; // Prevents double-taps while fetching history/creating session
+  bool isNavigating = false;
 
   @override
   void initState() {
@@ -33,17 +34,19 @@ class _AppSidebarState extends State<AppSidebar> {
   }
 
   Future<void> _confirmAndDelete(int sessionId, int index) async {
+    final loc = AppLocalizations.of(context)!;
+
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFFEAF8F1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("Delete Chat?", style: TextStyle(color: Color(0xFF13383A))),
-        content: const Text("Are you sure you want to delete this chat history? This cannot be undone.", style: TextStyle(color: Colors.black87)),
+        title: Text(loc.deleteChat, style: const TextStyle(color: Color(0xFF13383A))),
+        content: Text(loc.deleteChatConfirm, style: const TextStyle(color: Colors.black87)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel", style: TextStyle(color: Colors.black54)),
+            child: Text(loc.cancel, style: const TextStyle(color: Colors.black54)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -51,7 +54,7 @@ class _AppSidebarState extends State<AppSidebar> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("OK", style: TextStyle(color: Colors.white)),
+            child: Text(loc.ok, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -70,22 +73,23 @@ class _AppSidebarState extends State<AppSidebar> {
           recentChats.insert(index, removedChat);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to delete chat. Please try again.")),
+          SnackBar(content: Text(loc.deleteFailed)),
         );
       }
     }
   }
 
-  // 🔹 NEW: Handle creating a new chat
   Future<void> _createNewChat() async {
+    final loc = AppLocalizations.of(context)!;
+
     if (isNavigating) return;
     setState(() => isNavigating = true);
 
-    final newSessionId = await ApiService.createSession("New Chat");
+    final newSessionId = await ApiService.createSession(loc.newChat);
 
     if (!mounted) return;
     setState(() => isNavigating = false);
-    Navigator.pop(context); // Close Drawer
+    Navigator.pop(context);
 
     if (newSessionId != null) {
       Navigator.push(
@@ -96,13 +100,14 @@ class _AppSidebarState extends State<AppSidebar> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to create new chat session.")),
+        SnackBar(content: Text(loc.createChatFailed)),
       );
     }
   }
 
-  // 🔹 NEW: Handle opening an existing chat
   Future<void> _openChat(int sessionId) async {
+    final loc = AppLocalizations.of(context)!;
+
     if (isNavigating) return;
     setState(() => isNavigating = true);
 
@@ -110,7 +115,7 @@ class _AppSidebarState extends State<AppSidebar> {
 
     if (!mounted) return;
     setState(() => isNavigating = false);
-    Navigator.pop(context); // Close Drawer
+    Navigator.pop(context);
 
     if (history != null) {
       Navigator.push(
@@ -124,14 +129,15 @@ class _AppSidebarState extends State<AppSidebar> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to load chat history.")),
+        SnackBar(content: Text(loc.loadChatFailed)),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // To prevent interactions while loading a chat
+    final loc = AppLocalizations.of(context)!;
+
     return AbsorbPointer(
       absorbing: isNavigating,
       child: Drawer(
@@ -153,7 +159,7 @@ class _AppSidebarState extends State<AppSidebar> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🔹 TOP HEADER
+
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
@@ -175,30 +181,24 @@ class _AppSidebarState extends State<AppSidebar> {
                       ],
                     ),
                   ),
+
                   const SizedBox(height: 10),
 
-                  // 🔹 MAIN MENU ITEMS
-                  _buildMenuItem(
-                    Icons.chat_bubble_outline,
-                    'New chat',
-                    _createNewChat,
-                  ),
-                  _buildMenuItem(Icons.image_outlined, 'My Gallery', () {
-                    // TODO: Navigate to gallery
-                  }),
+                  _buildMenuItem(Icons.chat_bubble_outline, loc.newChat, _createNewChat),
+
+                  _buildMenuItem(Icons.image_outlined, loc.myGallery, () {}),
 
                   const SizedBox(height: 20),
                   const Divider(color: Colors.black12, thickness: 1),
                   const SizedBox(height: 10),
 
-                  // 🔹 RECENT CHATS TITLE & SPINNER
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Row(
                       children: [
-                        const Text(
-                          'Recent Chats',
-                          style: TextStyle(
+                        Text(
+                          loc.recentChats,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF13383A),
@@ -218,7 +218,6 @@ class _AppSidebarState extends State<AppSidebar> {
                     ),
                   ),
 
-                  // 🔹 RECENT CHATS LIST
                   Expanded(
                     child: isLoading
                         ? const Center(
@@ -227,10 +226,10 @@ class _AppSidebarState extends State<AppSidebar> {
                       ),
                     )
                         : recentChats.isEmpty
-                        ? const Center(
+                        ? Center(
                       child: Text(
-                        "No recent chats.",
-                        style: TextStyle(color: Colors.black54),
+                        loc.noRecentChats,
+                        style: const TextStyle(color: Colors.black54),
                       ),
                     )
                         : ListView.builder(
@@ -267,8 +266,10 @@ class _AppSidebarState extends State<AppSidebar> {
   }
 
   Widget _buildGlassyChatItem(dynamic chat, int index, BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
+
     final int sessionId = chat['id'];
-    final String title = chat['title'] ?? 'New Chat';
+    final String title = chat['title'] ?? loc.newChat;
     final String rawDate = chat['created_at'] ?? '';
     final String timeStr = rawDate.isNotEmpty && rawDate.length > 10
         ? rawDate.substring(0, 10)
@@ -285,7 +286,7 @@ class _AppSidebarState extends State<AppSidebar> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _openChat(sessionId), // 👈 Triggers fetch & navigate
+          onTap: () => _openChat(sessionId),
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(

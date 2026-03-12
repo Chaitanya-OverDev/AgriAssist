@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
 import 'package:agriassist/features/market/market_screen.dart';
 import 'package:agriassist/features/schemes/gov_schemes_screen.dart';
+import '../../l10n/app_localizations.dart';
 import './text_chat/text_chat_screen.dart';
 import '../../routes/app_routes.dart';
 import '../../core/widgets/app_sidebar.dart';
@@ -25,19 +26,15 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Fire the preload sequence as soon as the screen loads
     _silentlyPreloadData();
   }
 
   void _silentlyPreloadData() async {
     try {
-      // 1. Get GPS coordinates
       Position position = await _locationService.getCurrentLocation();
 
-      // 2. Trigger the sequence in ApiService
       ApiService.preloadDashboardData(position.latitude, position.longitude);
 
-      // 3. Get Government Schemes if any new available
       ApiService.syncGovSchemes();
     } catch (e) {
       if (kDebugMode) print("Location access denied or failed: $e");
@@ -46,6 +43,9 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+    final loc = AppLocalizations.of(context)!;
+
     return WillPopScope(
       onWillPop: () async {
         SystemNavigator.pop();
@@ -54,8 +54,10 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFEAF8F1),
         drawer: const AppSidebar(),
+
         appBar: AppBar(
           automaticallyImplyLeading: false,
+
           leading: Builder(
             builder: (context) {
               return IconButton(
@@ -66,19 +68,26 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
               );
             },
           ),
+
           title: const Text(
-            'AgriAssist',
+            "AgriAssist",
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w600,
               color: Color(0xFF13383A),
             ),
           ),
+
           backgroundColor: Colors.transparent,
           elevation: 0,
+
           actions: [
             IconButton(
-              icon: const Icon(Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
+              icon: const Icon(
+                Icons.settings_outlined,
+                color: Color(0xFF13383A),
+                size: 30,
+              ),
               onPressed: () {
                 Navigator.pushNamed(context, AppRoutes.settings);
               },
@@ -86,43 +95,77 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
             const SizedBox(width: 12),
           ],
         ),
+
         body: Column(
           children: [
+
             const SizedBox(height: 20),
 
-            /// 🔹 TOP OPTIONS
+            /// TOP OPTION CARDS
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
+
               child: Column(
                 children: [
+
                   Row(
                     children: [
+
                       _optionCard(
+                        context,
+                        "🌦️ ${loc.weather}",
+                            () => Navigator.push(
                           context,
-                          '🌦️ Weather Report',
-                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherScreen()))
+                          MaterialPageRoute(
+                            builder: (_) => const WeatherScreen(),
+                          ),
+                        ),
                       ),
+
                       const SizedBox(width: 12),
+
                       _optionCard(
+                        context,
+                        "💰 ${loc.marketPrices}",
+                            () => Navigator.push(
                           context,
-                          '💰 Bazaar Bhav',
-                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MarketScreen()))
+                          MaterialPageRoute(
+                            builder: (_) => const MarketScreen(),
+                          ),
+                        ),
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 12),
+
                   Row(
                     children: [
+
                       _optionCard(
+                        context,
+                        "🌱 ${loc.cropAdvice}",
+                            () => Navigator.push(
                           context,
-                          '🌱 Crop Advice',
-                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextChatScreen(prefilledQuery: '🌱 Crop Advice')))
+                          MaterialPageRoute(
+                            builder: (_) => const TextChatScreen(
+                              prefilledQuery: "Crop Advice",
+                            ),
+                          ),
+                        ),
                       ),
+
                       const SizedBox(width: 12),
+
                       _optionCard(
+                        context,
+                        "🏛️ ${loc.governmentSchemes}",
+                            () => Navigator.push(
                           context,
-                          '🏛️ Gov Schemes',
-                              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GovSchemesScreen()))
+                          MaterialPageRoute(
+                            builder: (_) => const GovSchemesScreen(),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -132,18 +175,23 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
             const Spacer(),
 
-            /// 👨‍🌾 FARMER IMAGE
+            /// FARMER IMAGE
             Container(
               width: 240,
               height: 240,
+
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white,
-                border: Border.all(color: const Color(0xFFB5CAC1), width: 20),
+                border: Border.all(
+                  color: const Color(0xFFB5CAC1),
+                  width: 20,
+                ),
               ),
+
               child: ClipOval(
                 child: Image.asset(
-                  'assets/images/farmer_character.png',
+                  "assets/images/farmer_character.png",
                   fit: BoxFit.cover,
                 ),
               ),
@@ -151,9 +199,10 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
             const SizedBox(height: 40),
 
-            const Text(
-              'Click on mic to start talking...',
-              style: TextStyle(
+            /// MIC INSTRUCTION
+            Text(
+              loc.micInstruction,
+              style: const TextStyle(
                 fontSize: 16,
                 color: Colors.black54,
                 fontWeight: FontWeight.w500,
@@ -162,11 +211,13 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
             const Spacer(),
 
-            /// 🎤 BOTTOM CONTROLS
+            /// BOTTOM CONTROLS
             Padding(
               padding: const EdgeInsets.only(bottom: 60),
+
               child: Row(
                 children: [
+
                   Expanded(
                     child: Center(
                       child: GestureDetector(
@@ -178,13 +229,20 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                             ),
                           );
                         },
+
                         child: Container(
                           width: 54,
                           height: 54,
+
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFFF5FBF9),
-                            border: Border.all(color: const Color(0xFFB5CAC1), width: 1),
+
+                            border: Border.all(
+                              color: const Color(0xFFB5CAC1),
+                              width: 1,
+                            ),
+
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.05),
@@ -193,6 +251,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                               ),
                             ],
                           ),
+
                           child: const Icon(
                             Icons.message_outlined,
                             color: Color(0xFF13383A),
@@ -203,6 +262,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                     ),
                   ),
 
+                  /// MIC BUTTON
                   GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -212,12 +272,15 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                         ),
                       );
                     },
+
                     child: Container(
                       width: 80,
                       height: 80,
+
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: const Color(0xFF13383A),
+
                         boxShadow: [
                           BoxShadow(
                             color: const Color(0xFF13383A).withOpacity(0.3),
@@ -226,6 +289,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                           ),
                         ],
                       ),
+
                       child: const Icon(
                         Icons.mic,
                         color: Colors.white,
@@ -245,14 +309,18 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
   }
 
   Widget _optionCard(BuildContext context, String title, VoidCallback onTap) {
+
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
+
         child: Container(
-          height: 64,
+          height: 72,
+
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
+
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -261,11 +329,16 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
               ),
             ],
           ),
+
           child: Center(
             child: Text(
               title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF13383A),
               ),

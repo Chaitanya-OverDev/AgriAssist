@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/location_service.dart';
 import 'package:agriassist/services/api_service.dart';
+import 'package:agriassist/l10n/app_localizations.dart';
 import 'models/weather_model.dart';
 
 class WeatherScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class WeatherScreen extends StatefulWidget {
 }
 
 class _WeatherScreenState extends State<WeatherScreen> {
+
   late Future<WeatherModel> _weatherFuture;
   final LocationService _locationService = LocationService();
 
@@ -23,11 +25,15 @@ class _WeatherScreenState extends State<WeatherScreen> {
     _weatherFuture = _fetchRealWeather();
   }
 
-  /// 🔁 Logic remains identical to ensure backend compatibility
   Future<WeatherModel> _fetchRealWeather() async {
+
     try {
-      Position position = await _locationService.getCurrentLocation();
-      bool locationUpdated = await ApiService.updateUserLocation(
+
+      Position position =
+      await _locationService.getCurrentLocation();
+
+      bool locationUpdated =
+      await ApiService.updateUserLocation(
         position.latitude,
         position.longitude,
       );
@@ -36,12 +42,17 @@ class _WeatherScreenState extends State<WeatherScreen> {
         throw Exception("Failed to sync location with server.");
       }
 
-      final weatherData = await ApiService.getWeatherForecast();
-      if (weatherData == null || !weatherData.containsKey('forecast')) {
-        throw Exception("Failed to load weather data from server.");
+      final weatherData =
+      await ApiService.getWeatherForecast();
+
+      if (weatherData == null ||
+          !weatherData.containsKey('forecast')) {
+        throw Exception("Failed to load weather data.");
       }
 
-      List<DailyForecast> parsedForecast = (weatherData['forecast'] as List).map((item) {
+      List<DailyForecast> parsedForecast =
+      (weatherData['forecast'] as List).map((item) {
+
         return DailyForecast(
           date: item['date'],
           tempMax: (item['temp_max'] as num).toDouble(),
@@ -49,112 +60,176 @@ class _WeatherScreenState extends State<WeatherScreen> {
           rainMm: (item['rain_mm'] as num).toDouble(),
           condition: item['condition'],
         );
+
       }).toList();
 
       return WeatherModel(
-        location: weatherData['location'] ?? "Unknown Location",
+        location: weatherData['location'] ??
+            "Unknown Location",
         forecast: parsedForecast,
       );
+
     } catch (e) {
       throw Exception(e.toString());
     }
   }
 
-  Map<String, String> _getFarmerAdvice(String condition) {
+  Map<String, String> _getFarmerAdvice(
+      String condition,
+      BuildContext context) {
+
+    final t = AppLocalizations.of(context)!;
+
     String cond = condition.toLowerCase();
+
     if (cond.contains('sun') || cond.contains('clear')) {
       return {
-        'good': 'Ideal for harvesting and sun-drying.',
-        'bad': 'High evaporation. Check irrigation.'
-      };
-    } else if (cond.contains('cloud')) {
-      return {
-        'good': 'Perfect for spraying fertilizers.',
-        'bad': 'Not ideal for solar-drying crops.'
-      };
-    } else if (cond.contains('rain')) {
-      return {
-        'good': 'Natural irrigation! Great for transplanting.',
-        'bad': 'Avoid harvesting to prevent rot.'
-      };
-    } else if (cond.contains('storm') || cond.contains('thunder')) {
-      return {
-        'good': 'Indoor planning and equipment maintenance.',
-        'bad': 'Secure livestock and stay safe.'
+        'good': t.adviceSunnyGood,
+        'bad': t.adviceSunnyBad
       };
     }
+
+    else if (cond.contains('cloud')) {
+      return {
+        'good': t.adviceCloudGood,
+        'bad': t.adviceCloudBad
+      };
+    }
+
+    else if (cond.contains('rain')) {
+      return {
+        'good': t.adviceRainGood,
+        'bad': t.adviceRainBad
+      };
+    }
+
+    else if (cond.contains('storm') ||
+        cond.contains('thunder')) {
+      return {
+        'good': t.adviceStormGood,
+        'bad': t.adviceStormBad
+      };
+    }
+
     return {
-      'good': 'Favorable for field inspections.',
-      'bad': 'Watch for sudden weather shifts.'
+      'good': t.adviceDefaultGood,
+      'bad': t.adviceDefaultBad
     };
   }
 
   @override
   Widget build(BuildContext context) {
+
+    final t = AppLocalizations.of(context)!;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F5), // Ultra clean light grey/green
+
+      backgroundColor: const Color(0xFFF4F7F5),
+
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
+
         leading: IconButton(
-          icon: const Icon(Icons.chevron_left, color: Colors.black87, size: 30),
+          icon: const Icon(Icons.chevron_left,
+              color: Colors.black87,
+              size: 30),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          "AgriWeather",
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, letterSpacing: 1),
+
+        title: Text(
+          t.agriWeather,
+          style: const TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1),
         ),
+
         centerTitle: true,
       ),
+
       body: FutureBuilder<WeatherModel>(
         future: _weatherFuture,
+
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.green));
+
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+
+            return const Center(
+                child: CircularProgressIndicator(
+                    color: Colors.green));
           }
 
           if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
+            return _buildErrorState(
+                snapshot.error.toString(),
+                context);
           }
 
-          if (!snapshot.hasData || snapshot.data!.forecast.isEmpty) {
-            return const Center(child: Text("No weather data available"));
+          if (!snapshot.hasData ||
+              snapshot.data!.forecast.isEmpty) {
+
+            return Center(
+              child: Text(t.noWeatherData),
+            );
           }
 
           final weather = snapshot.data!;
           final today = weather.forecast.first;
 
           return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
+            physics:
+            const BouncingScrollPhysics(),
+
             slivers: [
-              /// Top Summary Section
+
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: _buildMainWeatherCard(weather.location, today),
+                  padding:
+                  const EdgeInsets.all(20),
+
+                  child: _buildMainWeatherCard(
+                      weather.location,
+                      today),
                 ),
               ),
 
-              /// Forecast Header
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  padding:
+                  const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 8),
+
                   child: Text(
-                    "Weekly Forecast",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                    t.weeklyForecast,
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
 
-              /// Forecast List
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10),
+
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
+
+                  delegate:
+                  SliverChildBuilderDelegate(
                         (context, index) {
-                      return _forecastTile(weather.forecast[index], index == 0);
+
+                      return _forecastTile(
+                          weather.forecast[index],
+                          index == 0);
                     },
-                    childCount: weather.forecast.length,
+
+                    childCount:
+                    weather.forecast.length,
                   ),
                 ),
               ),
@@ -165,127 +240,186 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Widget _buildMainWeatherCard(String location, DailyForecast today) {
+  Widget _buildMainWeatherCard(
+      String location,
+      DailyForecast today) {
+
     return Container(
+
       padding: const EdgeInsets.all(24),
-      width: double.infinity, // Ensures card takes full width
+
       decoration: BoxDecoration(
+
         gradient: const LinearGradient(
-          colors: [Color(0xFF2E7D32), Color(0xFF81C784)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2E7D32),
+            Color(0xFF81C784)
+          ],
         ),
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.green.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          )
-        ],
+
+        borderRadius:
+        BorderRadius.circular(32),
       ),
-      child: Row( // Using a Row to split the card into two sides
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+      child: Row(
+        mainAxisAlignment:
+        MainAxisAlignment.spaceBetween,
+
         children: [
-          /// Left Side: Text Details
-          Expanded( // ⬅️ THIS IS THE FIX: It prevents text from pushing the icon off screen
+
+          Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min, // Constrains the height
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
+
               children: [
+
                 Row(
                   children: [
-                    const Icon(Icons.location_on, color: Colors.white70, size: 14),
+
+                    const Icon(
+                        Icons.location_on,
+                        color: Colors.white70,
+                        size: 14),
+
                     const SizedBox(width: 4),
-                    Expanded( // Prevents long city names from overflowing
+
+                    Expanded(
                       child: Text(
                         location,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
+                        overflow:
+                        TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white),
                       ),
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(
                   "${today.tempMax.toInt()}°C",
+
                   style: const TextStyle(
-                    fontSize: 52, // Slightly reduced to ensure fit on smaller devices
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                      fontSize: 52,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
+
                 Text(
                   today.condition,
                   style: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.white70,
-                    letterSpacing: 1.0,
-                  ),
+                      fontSize: 18,
+                      color: Colors.white70),
                 ),
               ],
             ),
           ),
 
-          /// Right Side: Weather Icon
-          Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: Image.asset(
-              _getWeatherImage(today.condition),
-              height: 80, // Reduced from 100 to provide more breathing room
-              width: 80,
-              fit: BoxFit.contain,
-              errorBuilder: (c, e, s) => const Icon(Icons.wb_sunny, size: 70, color: Colors.white),
-            ),
+          Image.asset(
+            _getWeatherImage(
+                today.condition),
+
+            height: 80,
+            width: 80,
+
+            errorBuilder:
+                (c, e, s) =>
+            const Icon(
+                Icons.wb_sunny,
+                size: 70,
+                color: Colors.white),
           ),
         ],
       ),
     );
   }
 
-  Widget _forecastTile(DailyForecast daily, bool isToday) {
-    DateTime parsedDate = DateTime.parse(daily.date);
-    String dayName = isToday ? "Today" : DateFormat('EEE, d MMM').format(parsedDate);
-    Map<String, String> advice = _getFarmerAdvice(daily.condition);
+  Widget _forecastTile(
+      DailyForecast daily,
+      bool isToday) {
+
+    final t = AppLocalizations.of(context)!;
+
+    DateTime parsedDate =
+    DateTime.parse(daily.date);
+
+    String dayName = isToday
+        ? t.today
+        : DateFormat('EEE, d MMM')
+        .format(parsedDate);
+
+    Map<String, String> advice =
+    _getFarmerAdvice(
+        daily.condition,
+        context);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+
+      margin:
+      const EdgeInsets.only(bottom: 16),
+
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius:
+        BorderRadius.circular(24),
       ),
+
       child: ExpansionTile(
-        shape: const RoundedRectangleBorder(side: BorderSide.none),
-        tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+
+        tilePadding:
+        const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8),
+
         leading: Image.asset(
-          _getWeatherImage(daily.condition),
+          _getWeatherImage(
+              daily.condition),
+
           height: 40,
-          errorBuilder: (c, e, s) => const Icon(Icons.cloud_queue, color: Colors.grey),
         ),
+
         title: Text(
           dayName,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          style: const TextStyle(
+              fontWeight:
+              FontWeight.bold),
         ),
-        subtitle: Text("${daily.tempMax.toInt()}° / ${daily.tempMin.toInt()}°"),
-        trailing: const Icon(Icons.expand_more, color: Colors.grey),
+
+        subtitle: Text(
+            "${daily.tempMax.toInt()}° / ${daily.tempMin.toInt()}°"),
+
+        trailing: const Icon(
+            Icons.expand_more),
+
         children: [
+
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            padding:
+            const EdgeInsets.fromLTRB(
+                20, 0, 20, 20),
+
             child: Column(
               children: [
+
                 const Divider(),
+
                 const SizedBox(height: 8),
-                _adviceRow(Icons.check_circle_outline, "Action", advice['good']!, Colors.green),
+
+                _adviceRow(
+                    Icons.check_circle_outline,
+                    t.action,
+                    advice['good']!,
+                    Colors.green),
+
                 const SizedBox(height: 12),
-                _adviceRow(Icons.warning_amber_rounded, "Caution", advice['bad']!, Colors.orange),
+
+                _adviceRow(
+                    Icons.warning_amber_rounded,
+                    t.caution,
+                    advice['bad']!,
+                    Colors.orange),
               ],
             ),
           )
@@ -294,18 +428,43 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Widget _adviceRow(IconData icon, String label, String text, Color color) {
+  Widget _adviceRow(
+      IconData icon,
+      String label,
+      String text,
+      Color color) {
+
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
+
       children: [
-        Icon(icon, color: color, size: 20),
+
+        Icon(icon,
+            color: color,
+            size: 20),
+
         const SizedBox(width: 10),
+
         Expanded(
           child: RichText(
+
             text: TextSpan(
-              style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+
+              style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  height: 1.4),
+
               children: [
-                TextSpan(text: "$label: ", style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+
+                TextSpan(
+                    text: "$label: ",
+                    style: TextStyle(
+                        fontWeight:
+                        FontWeight.bold,
+                        color: color)),
+
                 TextSpan(text: text),
               ],
             ),
@@ -315,38 +474,84 @@ class _WeatherScreenState extends State<WeatherScreen> {
     );
   }
 
-  Widget _buildErrorState(String error) {
+  Widget _buildErrorState(
+      String error,
+      BuildContext context) {
+
+    final t = AppLocalizations.of(context)!;
+
     return Center(
+
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment:
+        MainAxisAlignment.center,
+
         children: [
-          const Icon(Icons.cloud_off, size: 80, color: Colors.grey),
+
+          const Icon(Icons.cloud_off,
+              size: 80,
+              color: Colors.grey),
+
           const SizedBox(height: 16),
-          Text("Sync Error", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[800])),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(error, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+
+          Text(
+            t.syncError,
+            style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+          Padding(
+            padding:
+            const EdgeInsets.all(20),
+
+            child: Text(
+              error,
+              textAlign: TextAlign.center,
             ),
-            onPressed: () => setState(() => _weatherFuture = _fetchRealWeather()),
-            child: const Text("Retry Connection", style: TextStyle(color: Colors.white)),
+          ),
+
+          ElevatedButton(
+
+            onPressed: () {
+
+              setState(() {
+                _weatherFuture =
+                    _fetchRealWeather();
+              });
+            },
+
+            child: Text(
+                t.retryConnection),
           )
         ],
       ),
     );
   }
 
-  String _getWeatherImage(String condition) {
+  String _getWeatherImage(
+      String condition) {
+
     switch (condition.toLowerCase()) {
-      case "sunny": case "clear": return "assets/images/weather/sunny.png";
-      case "cloudy": case "clouds": return "assets/images/weather/cloudy.png";
-      case "rain": case "rainy": return "assets/images/weather/rain.png";
-      case "storm": case "thunderstorm": return "assets/images/weather/storm.png";
-      default: return "assets/images/weather/default.png";
+
+      case "sunny":
+      case "clear":
+        return "assets/images/weather/sunny.png";
+
+      case "cloudy":
+      case "clouds":
+        return "assets/images/weather/cloudy.png";
+
+      case "rain":
+      case "rainy":
+        return "assets/images/weather/rain.png";
+
+      case "storm":
+      case "thunderstorm":
+        return "assets/images/weather/storm.png";
+
+      default:
+        return "assets/images/weather/default.png";
     }
   }
 }
