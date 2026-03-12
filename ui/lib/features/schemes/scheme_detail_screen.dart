@@ -17,10 +17,12 @@ class SchemeDetailScreen extends StatelessWidget {
         slivers: [
           // 1. Sleek Collapsing Header
           SliverAppBar(
-            expandedHeight: 200,
+            expandedHeight: 220, // Slightly taller to accommodate multi-line titles
             pinned: true,
             stretch: true,
+            backgroundColor: const Color(0xFF13383A),
             flexibleSpace: FlexibleSpaceBar(
+              stretchModes: const [StretchMode.zoomBackground],
               background: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -32,20 +34,30 @@ class SchemeDetailScreen extends StatelessWidget {
                 child: Center(
                   child: Icon(
                     Icons.account_balance_wallet_rounded,
-                    size: 80,
-                    color: Colors.white.withOpacity(0.2),
+                    size: 100,
+                    color: Colors.white.withOpacity(0.1),
                   ),
                 ),
               ),
-              title: Text(
-                scheme['scheme_name'] ?? "Scheme Details",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              // This Alignment ensures the title stays readable
+              // and doesn't collide with the back button when expanded.
+              title: Padding(
+                padding: const EdgeInsets.only(right: 16, left: 16),
+                child: Text(
+                  scheme['scheme_name'] ?? "Scheme Details",
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    shadows: [Shadow(blurRadius: 10, color: Colors.black26)],
+                  ),
                 ),
               ),
-              titlePadding: const EdgeInsets.only(left: 50, bottom: 16),
+              centerTitle: true,
+              titlePadding: const EdgeInsets.only(bottom: 16),
             ),
           ),
 
@@ -78,10 +90,15 @@ class SchemeDetailScreen extends StatelessWidget {
                   if (statesList.isNotEmpty) ...[
                     _buildSectionHeader(Icons.map_rounded, "Geographic Eligibility"),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: statesList.map<Widget>((state) => _buildStateChip(state.toString())).toList(),
+                    Text(
+                      // .join(', ') turns [Himachal Pradesh] into Himachal Pradesh
+                      // and [Goa, Punjab] into Goa, Punjab
+                      statesList.join(", ").replaceAll('[', '').replaceAll(']', ''),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.blueGrey[800],
+                        height: 1.5,
+                      ),
                     ),
                   ],
 
@@ -173,7 +190,7 @@ class SchemeDetailScreen extends StatelessWidget {
 
   Widget _buildStickyFooter() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 52),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
