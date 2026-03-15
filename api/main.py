@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta,date,datetime
 import random
 import os
+import threading
 from dotenv import load_dotenv
 import re
 import requests
@@ -27,8 +28,55 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Farmer Chatbot API")
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY)
+
+# --- API KEY ROTATION MANAGER ---
+api_keys = []
+for i in range(1, 9):
+    key = os.getenv(f"GEMINI_API_KEY_{i}")
+    if key:
+        api_keys.append(key)
+
+# Fallback just in case
+if not api_keys and os.getenv("GEMINI_API_KEY"):
+    api_keys.append(os.getenv("GEMINI_API_KEY"))
+
+if not api_keys:
+    print("WARNING: No Gemini API keys found in environment variables!")
+
+current_key_index = 0
+key_lock = threading.Lock()
+
+def get_current_client():
+    """Returns a client initialized with the currently active key."""
+    return genai.Client(api_key=api_keys[current_key_index])
+
+def generate_content_with_retry(model: str, contents: list, config: types.GenerateContentConfig):
+    global current_key_index
+    max_retries = len(api_keys)
+
+    for attempt in range(max_retries):
+        client = get_current_client()
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
+            return response
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg or "resource_exhausted" in error_msg:
+                with key_lock:
+                    new_index = (current_key_index + 1) % len(api_keys)
+                    if new_index != current_key_index: # Only print if it actually changed
+                        current_key_index = new_index
+                        print(f"⚠️ Key limit reached. Switching to GEMINI_API_KEY_{current_key_index + 1}...")
+            else:
+                raise e
+                
+    # If we loop through all 8 keys and they all fail
+    raise Exception("All Gemini API keys have exhausted their limits.")
 
 # --- 1. Send OTP Endpoint (No Code in Response) ---
 @app.post("/auth/send-otp")
@@ -177,8 +225,29 @@ def get_user_sessions(user_id: int, db: Session = Depends(get_db)):
     sessions = db.query(ChatSession).filter(ChatSession.user_id == user_id).order_by(ChatSession.created_at.desc()).all()
     return sessions
 
+# --- BACKGROUND TASK ---
+async def process_tts_background(message_id: int, text: str):
+    """Runs in the background to generate and save audio to the DB."""
+    # We must open a NEW database session for background tasks
+    db = SessionLocal() 
+    try:
+        # Generate the audio bytes
+        audio_bytes = await generate_audio_bytes(text)
+        
+        # Save to database
+        message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
+        if message:
+            message.audio_data = audio_bytes
+            db.commit()
+            print(f"Successfully saved audio for message {message_id}")
+    except Exception as e:
+        print(f"Background TTS Error: {e}")
+    finally:
+        db.close()
+
+
 # --- HELPER: SYSTEM INSTRUCTIONS ---
-def build_system_instruction(user, db, is_voice_mode: bool = False):
+def build_system_instruction(user, db, is_voice_mode: bool = False, language: str = "Marathi"):
     today = datetime.now().strftime("%d %B %Y")
 
     # ---------------- LOCATION & WEATHER ----------------
@@ -231,18 +300,18 @@ def build_system_instruction(user, db, is_voice_mode: bool = False):
             f"{weather_context}"
         )
 
-    # ---------------- VOICE AND TEXT MODE ----------------
+  # ---------------- VOICE AND TEXT MODE ----------------
     if is_voice_mode:
-        behavior_rules = """
-1. **Tone & Style:** Speak completely naturally like a human agricultural expert on a phone call. Use a friendly conversational style (Hinglish/Hindi/English). Talk like a human being, not a robot reading a manual.
+        behavior_rules = f"""
+1. **Language & Tone:** You MUST communicate entirely in **{language}**. Speak completely naturally like a human agricultural expert on a phone call. Use a friendly conversational style. Talk like a human being, not a robot reading a manual.
 2. **Formatting & Punctuation:** STRICTLY NO MARKDOWN AND NO LISTS. Do not use colons (:), bullet points, numbered lists, asterisks (*), or hashtags (#). Use ONLY plain text with simple punctuation like periods and commas so the Text-to-Speech engine reads it smoothly.
 3. **Conciseness:** Keep answers very short and conversational (1-3 simple sentences). Wait for the farmer to ask follow-up questions.
         """
     else:
-        behavior_rules = """
-1. **Tone & Style:** Always ask politely, be highly respectful, and use a friendly spoken-style (Hinglish/Hindi/English).
-2. **Formatting:** You MUST use markdown formatting (like **bolding** and bullet points) to organize your response. The user is reading this in a chat interface, so it needs to look clean and structured.
-3. **Conciseness:** Keep answers relatively short (3-4 sentences) so text is easy to read.
+        behavior_rules = f"""
+1. **Language & Tone:** You MUST communicate entirely in **{language}**. Always ask politely, be highly respectful, and use a friendly spoken-style.
+2. **Formatting:** You MUST use markdown formatting (like **bolding** and bullet points) to organize your response. Use clear headings if providing a guide.
+3. **Dynamic Length:** For general questions, keep answers concise (3-4 sentences). HOWEVER, if the user asks for a "guide", "plan", or "how to plant" a crop, ignore the length limit and provide a comprehensive, fully detailed, step-by-step response.
         """
 
     # ---------------- FINAL SYSTEM PROMPT ----------------
@@ -292,26 +361,6 @@ You MUST map the farmer's spoken Hindi/Marathi/English word to these EXACT offic
 * Jowar / Sorghum -> "Jowar(Sorghum)"
 """
 
-# --- BACKGROUND TASK ---
-async def process_tts_background(message_id: int, text: str):
-    """Runs in the background to generate and save audio to the DB."""
-    # We must open a NEW database session for background tasks
-    db = SessionLocal() 
-    try:
-        # Generate the audio bytes
-        audio_bytes = await generate_audio_bytes(text)
-        
-        # Save to database
-        message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
-        if message:
-            message.audio_data = audio_bytes
-            db.commit()
-            print(f"Successfully saved audio for message {message_id}")
-    except Exception as e:
-        print(f"Background TTS Error: {e}")
-    finally:
-        db.close()
-
 # --- 9. Send Message & Get Response ---
 @app.post("/chat/{session_id}/message", response_model=schemas.MessageResponse)
 def chat_with_gemini(
@@ -341,19 +390,24 @@ def chat_with_gemini(
         ))
 
     user = session.user
-    system_instruction = build_system_instruction(user, db, request.is_voice_mode)
+    system_instruction = build_system_instruction(
+        user=user, 
+        db=db, 
+        is_voice_mode=request.is_voice_mode, 
+        language=request.language
+    )
     
     generate_config = types.GenerateContentConfig(
         system_instruction=system_instruction,
         temperature=0.7,
-        max_output_tokens=200,
+        max_output_tokens=1500,
         tools=[weather_tool, bhav_tool], 
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True) 
     )
 
     try:
         model = "gemini-2.5-flash" 
-        response = client.models.generate_content(
+        response = generate_content_with_retry(
             model=model,
             contents=chat_history,
             config=generate_config
@@ -393,7 +447,7 @@ def chat_with_gemini(
                     )]
                 ))
 
-                final_response = client.models.generate_content(
+                final_response = generate_content_with_retry(
                     model=model,
                     contents=chat_history,
                     config=generate_config
@@ -423,7 +477,7 @@ def chat_with_gemini(
                     )]
                 ))
 
-                final_response = client.models.generate_content(
+                final_response = generate_content_with_retry(
                     model=model,
                     contents=chat_history,
                     config=generate_config
@@ -465,9 +519,9 @@ def chat_with_gemini(
             Query: {request.content}
             """
 
-            title_response = client.models.generate_content(
+            title_response = generate_content_with_retry(
                 model="gemini-2.5-flash-lite",
-                contents=title_prompt,
+                contents=[title_prompt], 
                 config=types.GenerateContentConfig(max_output_tokens=20)
             )
 

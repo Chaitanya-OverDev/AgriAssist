@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:agriassist/features/chat/text_chat/text_chat_screen.dart'; // Adjust path
-import 'package:agriassist/l10n/app_localizations.dart';
+import 'package:agriassist/features/chat/text_chat/text_chat_screen.dart';
 
 class CropSelectionScreen extends StatelessWidget {
   const CropSelectionScreen({super.key});
@@ -112,9 +111,8 @@ class CropSelectionScreen extends StatelessWidget {
     );
   }
 
-  // --- THE NEW BOTTOM SHEET ---
+
   void _showFarmDetailsSheet(BuildContext context, String cropName, String localName) {
-    // Controllers and state variables for the form
     final TextEditingController landSizeController = TextEditingController();
     String selectedWaterSource = 'Borewell';
     String selectedIrrigation = 'Drip Irrigation';

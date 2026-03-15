@@ -16,7 +16,6 @@ class BotListeningScreen extends StatefulWidget {
 
 class _BotListeningScreenState extends State<BotListeningScreen>
     with SingleTickerProviderStateMixin {
-
   final VoiceRecognitionService _sttService = VoiceRecognitionService();
   final ChatAudioService _ttsService = ChatAudioService();
 
@@ -39,7 +38,7 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   };
 
   int? _activeSessionId;
-  List<Map<String, dynamic>> _messages = [];
+  final List<Map<String, dynamic>> _messages = [];
 
   @override
   void initState() {
@@ -61,7 +60,6 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   }
 
   Future<void> _startConversationFlow() async {
-
     if (ApiService.currentUserId == null) {
       final storedId = await AuthService.getUserId();
       if (storedId != null) ApiService.currentUserId = storedId;
@@ -75,15 +73,17 @@ class _BotListeningScreenState extends State<BotListeningScreen>
     } else {
       if (mounted) {
         final t = AppLocalizations.of(context)!;
-        setState(() => _statusText = t.micNotAvailable);
+        setState(() => _statusText = t.micNotAvailable); // Requires micNotAvailable in translation
       }
     }
   }
 
   void _startListening() {
-    final t = AppLocalizations.of(context)!;
-
     if (_isProcessing || _isBotSpeaking) return;
+
+    // Safety check for localization
+    if (!mounted) return;
+    final t = AppLocalizations.of(context)!;
 
     if (mounted) {
       setState(() {
@@ -113,6 +113,7 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   }
 
   Future<void> _onSpeechComplete() async {
+    if (!mounted) return;
     final t = AppLocalizations.of(context)!;
 
     if (mounted) {
@@ -134,6 +135,7 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   }
 
   Future<void> _sendMessageToApi(String text) async {
+    if (!mounted) return;
     final t = AppLocalizations.of(context)!;
 
     if (mounted) {
@@ -179,6 +181,7 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   }
 
   Future<void> _speakResponse(int messageId) async {
+    if (!mounted) return;
     final t = AppLocalizations.of(context)!;
 
     if (mounted) {
@@ -241,7 +244,8 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   String _getLanguageShortName() {
     return _languages.entries
         .firstWhere((element) => element.value == _selectedLocaleId)
-        .key;
+        .key
+        .split(' ')[0];
   }
 
   @override
@@ -254,7 +258,6 @@ class _BotListeningScreenState extends State<BotListeningScreen>
   }
 
   Widget _buildDynamicMicButton() {
-
     final bool isBusy = _isProcessing || _isBotSpeaking;
 
     Color micBgColor;
@@ -289,7 +292,6 @@ class _BotListeningScreenState extends State<BotListeningScreen>
           return Stack(
             alignment: Alignment.center,
             children: [
-
               if (_isMicActive)
                 Transform.scale(
                   scale: 1.0 + (_rippleAnim.value * 0.6),
@@ -302,13 +304,19 @@ class _BotListeningScreenState extends State<BotListeningScreen>
                     ),
                   ),
                 ),
-
               Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: micBgColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: micBgColor.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Center(child: iconWidget),
               ),
@@ -321,7 +329,6 @@ class _BotListeningScreenState extends State<BotListeningScreen>
 
   @override
   Widget build(BuildContext context) {
-
     final t = AppLocalizations.of(context)!;
 
     return Scaffold(
@@ -330,22 +337,18 @@ class _BotListeningScreenState extends State<BotListeningScreen>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFE4F6F0),
-              Color(0xFFC7EBD9)
-            ],
+            colors: [Color(0xFFE4F6F0), Color(0xFFC7EBD9)],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
-
+              // --- TOP BAR WITH LANGUAGE SELECTOR ---
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-
                     Text(
                       t.appTitle,
                       style: const TextStyle(
@@ -354,43 +357,121 @@ class _BotListeningScreenState extends State<BotListeningScreen>
                         color: Color(0xFF13383A),
                       ),
                     ),
-
-                    PopupMenuButton<String>(
-                      icon: const Icon(
-                        Icons.settings_outlined,
-                        color: Color(0xFF13383A),
-                        size: 30,
-                      ),
-                      onSelected: (val) {
-                        setState(() {
-                          _selectedLocaleId = val;
-                          _sttService.stop();
-                          Future.delayed(
-                            const Duration(milliseconds: 200),
-                            _startListening,
-                          );
-                        });
-                      },
-                      itemBuilder: (ctx) => _languages.entries
-                          .map(
-                            (e) => PopupMenuItem(
-                          value: e.value,
-                          child: Text(e.key),
+                    Row(
+                      children: [
+                        Text(
+                          _getLanguageShortName(),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF13383A),
+                          ),
                         ),
-                      )
-                          .toList(),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.settings_outlined, color: Color(0xFF13383A), size: 30),
+                          onSelected: (val) {
+                            setState(() {
+                              _selectedLocaleId = val;
+                              _sttService.stop();
+                              Future.delayed(const Duration(milliseconds: 200), _startListening);
+                            });
+                          },
+                          itemBuilder: (ctx) => _languages.entries
+                              .map((e) => PopupMenuItem(value: e.value, child: Text(e.key)))
+                              .toList(),
+                        ),
+                      ],
                     ),
-
                   ],
+                ),
+              ),
+
+              const SizedBox(height: 50),
+
+              // --- CENTER FARMER IMAGE ---
+              Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFFB5CAC1), width: 20),
+                ),
+                child: ClipOval(
+                  child: Image.asset('assets/images/farmer_listening.png', fit: BoxFit.cover),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // --- LIVE TRANSCRIPT & STATUS ---
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 16, color: Colors.black54, height: 1.4),
+                      children: [
+                        TextSpan(
+                          text: "$_statusText\n",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF13383A),
+                            fontSize: 18,
+                          ),
+                        ),
+                        TextSpan(
+                          text: _userTranscript.isEmpty && _isMicActive
+                              ? "..."
+                              : _userTranscript,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
 
               const Spacer(),
 
-              _buildDynamicMicButton(),
-
-              const SizedBox(height: 80),
-
+              // --- BOTTOM MIC & CLOSE ROW ---
+              Padding(
+                padding: const EdgeInsets.only(bottom: 60),
+                child: Row(
+                  children: [
+                    const Expanded(child: SizedBox()),
+                    _buildDynamicMicButton(),
+                    Expanded(
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: _goToTextChat,
+                          child: Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFE8D5D5),
+                              border: Border.all(color: const Color(0xFFD1B2B2), width: 1),
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Color(0xFFB24D4D),
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
