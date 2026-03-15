@@ -6,7 +6,6 @@ import 'package:csv/csv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../core/services/auth_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
@@ -177,26 +176,12 @@ class ApiService {
     }
   }
 
-  // --- 6. Get TTS Audio (Updated for On-Demand Edge TTS) ---
-  static Future<Uint8List?> getTtsAudio(int messageId) async {
+  // --- 6. Get TTS Audio URL  ---
+  static Future<String?> getTtsAudioUrl(int messageId) async {
     await _ensureInitialized();
     if (currentUserId == null) return null;
 
-    final url = Uri.parse('$baseUrl/chat/message/$messageId/audio');
-
-    try {
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        return response.bodyBytes;
-      } else {
-        if (kDebugMode) print("❌ getTtsAudio failed: ${response.statusCode}");
-        return null;
-      }
-    } catch (e) {
-      if (kDebugMode) print("❌ getTtsAudio error: $e");
-      return null;
-    }
+    return '$baseUrl/chat/message/$messageId/audio';
   }
 
   // --- 7. Get User Sessions ---

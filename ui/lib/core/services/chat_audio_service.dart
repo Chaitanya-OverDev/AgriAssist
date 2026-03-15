@@ -1,8 +1,5 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:agriassist/services/api_service.dart';
 
 class ChatAudioService {
@@ -32,6 +29,7 @@ class ChatAudioService {
   }
 
   Future<void> play(int messageId, int index) async {
+    // If tapping the currently playing message, stop it
     if (_playingMessageIndex == index) {
       await stop();
       return;
@@ -43,23 +41,19 @@ class ChatAudioService {
     _onPlayingIndexChanged?.call();
 
     try {
-      // 1. Fetch MP3 bytes from backend
-      final Uint8List? audioBytes = await ApiService.getTtsAudio(messageId);
+      // 1. Get the streaming URL (No more downloading bytes!)
+      final String? streamUrl = await ApiService.getTtsAudioUrl(messageId);
 
-      if (audioBytes == null || audioBytes.isEmpty) {
-        throw Exception("Failed to load audio from server.");
+      if (streamUrl == null || streamUrl.isEmpty) {
+        throw Exception("Failed to get audio stream URL from server.");
       }
 
-      // 2. Write bytes to a temporary physical file
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/tts_message_$messageId.mp3');
-      await file.writeAsBytes(audioBytes, flush: true);
-
-      // 3. Play from the physical file
-      await _player.play(DeviceFileSource(file.path));
+      // 2. Play directly from the live HTTP stream!
+      // The native media player handles chunk-by-chunk playback automatically.
+      await _player.play(UrlSource(streamUrl));
 
     } catch (e) {
-      debugPrint("TTS Play Error: $e");
+      debugPrint("TTS Streaming Play Error: $e");
       _playingMessageIndex = null;
       _onPlayingIndexChanged?.call();
     }

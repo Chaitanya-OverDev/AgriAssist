@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Response,BackgroundTasks, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import timedelta,date,datetime
 import random
@@ -8,7 +9,7 @@ from dotenv import load_dotenv
 import re
 import requests
 import json
-from api.tts_service import generate_audio_bytes
+from api.tts_service import generate_audio_bytes,stream_audio_generator
 
 # Google GenAI Imports
 from google import genai
@@ -547,28 +548,38 @@ def chat_with_gemini(
 
     return ai_msg
 
-# --- : FETCH SAVED AUDIO ---
+# --- 10. FETCH OR STREAM SAVED AUDIO ---
 @app.get("/chat/message/{message_id}/audio")
 async def get_message_audio(message_id: int, db: Session = Depends(get_db)):
-    """Retrieves the stored MP3. If it doesn't exist, generates it instantly."""
+    """Retrieves stored MP3 or streams it instantly if missing."""
     message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
     
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
         
-    # If audio doesn't exist in DB (e.g., old history message), generate it NOW
-    if not message.audio_data:
-        try:
-            audio_bytes = await generate_audio_bytes(message.content)
-            message.audio_data = audio_bytes
-            db.commit()
-            print(f"Generated on-demand audio for message {message_id}")
-        except Exception as e:
-            print(f"On-demand TTS Error: {e}")
-            raise HTTPException(status_code=500, detail="Failed to generate audio.")
+    # 1. FAST PATH: If audio already exists in DB, send the complete file
+    if message.audio_data:
+        return Response(content=message.audio_data, media_type="audio/mpeg")
 
-    # Return the binary data as an MP3 file
-    return Response(content=message.audio_data, media_type="audio/mpeg")
+    # 2. STREAM PATH: Generate on-the-fly, stream to client, then save to DB
+    async def audio_streamer():
+        audio_buffer = bytearray()
+        try:
+            async for chunk in stream_audio_generator(message.content):
+                audio_buffer.extend(chunk)
+                yield chunk
+                
+           
+            message.audio_data = bytes(audio_buffer)
+            db.commit()
+            print(f"Stream complete & saved to DB for message {message_id}")
+            
+        except Exception as e:
+            print(f"Streaming TTS Error: {e}")
+            db.rollback()
+
+   
+    return StreamingResponse(audio_streamer(), media_type="audio/mpeg")
 
 # --- 10. Get Message History ---
 @app.get("/chat/{session_id}/history", response_model=list[schemas.MessageResponse])
