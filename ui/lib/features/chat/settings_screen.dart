@@ -21,7 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'मराठी (Marathi)': 'mr_IN',
   };
 
-  String _currentLangName = 'English';
+  String _currentLangName = 'मराठी (Marathi)';
 
   @override
   void initState() {
@@ -33,7 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
 
     setState(() {
-      _currentLangName = prefs.getString('selected_lang_name') ?? 'English';
+      _currentLangName = prefs.getString('selected_lang_name') ?? 'मराठी (Marathi)';
     });
   }
 

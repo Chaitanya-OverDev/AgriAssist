@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:agriassist/features/chat/voice_chat/bot_listening_screen.dart';
 import 'package:agriassist/features/market/market_screen.dart';
+import 'package:agriassist/features/crop_advice/crop_selection_screen.dart';
 import 'package:agriassist/features/schemes/gov_schemes_screen.dart';
 import '../../l10n/app_localizations.dart';
 import './text_chat/text_chat_screen.dart';
@@ -148,9 +149,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                             () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const TextChatScreen(
-                              prefilledQuery: "Crop Advice",
-                            ),
+                            builder: (_) => const CropSelectionScreen(), // <-- NEW ROUTING
                           ),
                         ),
                       ),

@@ -10,8 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // ⭐ PRODUCTION URL (Render)
-  static const String baseUrl = 'https://agriassistback.onrender.com';
-  // static const String baseUrl= 'http://10.0.2.2:8000'; // For emulator
+  // static const String baseUrl = 'https://agriassistback.onrender.com';
+  static const String baseUrl= 'http://10.0.2.2:8000'; // For emulator
   // static const String baseUrl= 'http://10.243.19.128:8000'; // For local device
 
   static String? currentPhoneNumber;
@@ -137,12 +137,16 @@ class ApiService {
     }
   }
 
-  // --- 5. Send Chat Message ---
+// --- 5. Send Chat Message ---
   static Future<Map<String, dynamic>?> sendChatMessage(
       int sessionId, String message,
       {bool isVoiceMode = false}) async {
     await _ensureInitialized();
     if (currentUserId == null) return null;
+
+    // Grab language from SharedPreferences (Default to Marathi)
+    final prefs = await SharedPreferences.getInstance();
+    String currentLanguage = prefs.getString('selected_lang_name') ?? 'मराठी (Marathi)';
 
     final url =
     Uri.parse('$baseUrl/chat/$sessionId/message?user_id=$currentUserId');
@@ -153,7 +157,8 @@ class ApiService {
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "content": message,
-          "is_voice_mode": isVoiceMode
+          "is_voice_mode": isVoiceMode,
+          "language": currentLanguage, // Send language to the backend
         }),
       );
 
@@ -521,6 +526,30 @@ class ApiService {
 
     } catch (e) {
       if (kDebugMode) print("❌ Failed to parse offline CSV: $e");
+    }
+  }
+
+  // --- 18. Get Crop Advice ---
+  static Future<Map<String, dynamic>?> getCropAdvice() async {
+    await _ensureInitialized();
+    if (currentUserId == null) return null;
+
+    final url = Uri.parse('$baseUrl/users/$currentUserId/crop-advice');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      if (kDebugMode) print("❌ getCropAdvice failed: ${response.statusCode}");
+      return null;
+    } catch (e) {
+      if (kDebugMode) print("❌ getCropAdvice error: $e");
+      return null;
     }
   }
 }
